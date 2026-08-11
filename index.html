@@ -196,6 +196,43 @@ tr.row-hidden{opacity:.4}
   table{min-width:680px}
   .title{font-size:16px}
 }
+
+/* ---- Back button ---- */
+.back-btn{display:inline-flex;align-items:center;gap:6px;background:#0b1324;color:var(--text);
+  border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-weight:800;font-size:13px;cursor:pointer}
+.back-btn:hover{border-color:rgba(245,197,66,.4)}
+
+/* ---- Plan / package card ---- */
+.plan-card{position:relative;overflow:hidden;border-radius:22px;padding:20px;
+  background:linear-gradient(160deg,rgba(245,197,66,.16),rgba(96,165,250,.06));
+  border:1px solid rgba(245,197,66,.28)}
+.plan-card .plan-badge{position:absolute;top:14px;right:14px;background:linear-gradient(135deg,var(--green),#76f1ab);
+  color:#07220f;font-size:11px;font-weight:900;padding:4px 10px;border-radius:999px}
+.plan-card .plan-price{font-size:34px;font-weight:900;color:var(--gold);display:flex;align-items:baseline;gap:6px}
+.plan-card .plan-price span{font-size:14px;color:var(--muted);font-weight:700}
+.plan-card .plan-name{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#ffe9a8;font-weight:800;margin-bottom:6px}
+.plan-card ul{margin:12px 0 0;padding-left:18px;color:var(--muted);font-size:13px;line-height:1.9}
+.plan-card ul li b{color:var(--text)}
+
+/* ---- Completion / repurchase banner ---- */
+.repurchase-banner{background:linear-gradient(160deg,rgba(37,211,102,.16),rgba(96,165,250,.06));
+  border:1px solid rgba(37,211,102,.3);border-radius:20px;padding:16px;margin-bottom:14px;
+  display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.repurchase-banner .r-text b{display:block;font-size:15px}
+.repurchase-banner .r-text span{font-size:12px;color:var(--muted)}
+
+/* ---- Modal ---- */
+.modal-overlay{position:fixed;inset:0;background:rgba(3,6,12,.72);z-index:400;display:flex;
+  align-items:center;justify-content:center;padding:16px}
+.modal-box{width:100%;max-width:440px;max-height:90vh;overflow:auto;padding:20px;position:relative}
+.modal-close{position:absolute;top:12px;right:12px}
+.credential-card{border:1px solid rgba(245,197,66,.35);border-radius:16px;padding:16px;margin-top:14px;
+  background:rgba(245,197,66,.08)}
+.credential-card .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+  border-bottom:1px dashed var(--line)}
+.credential-card .row:last-child{border-bottom:0}
+.credential-card .cl{font-size:11px;color:var(--muted)}
+.credential-card .cv{font-size:16px;font-weight:900;color:var(--gold);word-break:break-all}
 </style>
 </head>
 <body>
@@ -216,6 +253,21 @@ const LS_DRAFT_PREFIX = "ccm_draft_";   // + username -> {id: remarksText} unsen
 const LS_QUEUE_RETRY = "ccm_retry_queue_v1"; // failed updates waiting to sync
 const LS_PROFILE_PREFIX = "ccm_sharelink_"; // + key + username -> saved shareable link
 const STATUS_OPTIONS = ["Pending","Interested","Not Interested","Callback","Busy","Wrong Number","No Answer","Dropped","Follow Up","Do Not Call","Closed"];
+
+/* =====================================================================
+   PAYMENT / SELF-SERVE CONTACT PACKAGE CONFIG
+   - PLAN_PRICE_INR / PLAN_CONTACTS define the package shown to buyers.
+   - RAZORPAY_KEY_ID must be your own LIVE/TEST Key ID from the Razorpay
+     dashboard (Settings → API Keys). It is safe to expose the Key ID in
+     client code (that's how Razorpay Checkout works) — never put your
+     Key SECRET here. Payment must still be verified on your Apps Script
+     backend (signature check) before contacts are handed out; see the
+     "selfpurchasecontacts" backend note further down this file.
+   ===================================================================== */
+const PLAN_PRICE_INR = 100;
+const PLAN_CONTACTS  = 500;
+const RAZORPAY_KEY_ID = "RAZORPAY_KEY_ID_HERE"; // <-- paste your Razorpay Key ID
+const LS_LAST_PURCHASE = "ccm_last_purchase_v1";
 
 const app = document.getElementById("app");
 const toast = document.getElementById("toast");
@@ -323,6 +375,121 @@ async function api(action, payload={}){
 async function refreshUsage(){
   const r = await api("getusagecount", {});
   if(r.ok) usageCount = r.usageCount;
+}
+
+/* ---------------------- Self-serve contact package purchase ---------------------- */
+function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||"").trim()); }
+function isValidMobile(v){ return String(v||"").replace(/\D/g,"").length >= 10; }
+function generatePin(len=6){
+  let p = "";
+  for(let i=0;i<len;i++) p += Math.floor(Math.random()*10);
+  return p;
+}
+function loadRazorpayScript(){
+  return new Promise((resolve, reject) => {
+    if(window.Razorpay) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("Could not load payment gateway. Check your connection."));
+    document.body.appendChild(s);
+  });
+}
+
+/* Opens the "buy 500 contacts for ₹100" flow. Collects proper buyer
+   credentials (full name, email, mobile) BEFORE any payment is attempted,
+   then launches Razorpay Checkout. On successful payment it asks the
+   backend (action: "selfpurchasecontacts") to verify the payment, create
+   or top up the buyer's login, and auto-assign the next PLAN_CONTACTS
+   unassigned contacts to them. The buyer's email becomes their unique
+   login ID; a fresh PIN is generated automatically. */
+function openPurchaseModal(opts={}){
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="glass modal-box">
+      <button class="icon-btn modal-close" id="pmClose">✕</button>
+      <div class="section-title" style="margin-bottom:2px"><span>Buy ${PLAN_CONTACTS} Contacts — ₹${PLAN_PRICE_INR}</span></div>
+      <div class="mini" style="margin-bottom:12px">Enter your details to receive your login. Your email becomes your unique ID and a PIN is generated for you automatically once payment is confirmed.</div>
+      <div class="label">Full Name</div>
+      <input id="pmName" type="text" placeholder="e.g. Rajendra Kumar" value="${esc(opts.name||"")}"/>
+      <div class="label">Email (becomes your unique ID)</div>
+      <input id="pmEmail" type="text" placeholder="you@example.com" value="${esc(opts.email||"")}"/>
+      <div class="label">Mobile Number</div>
+      <input id="pmMobile" type="text" inputmode="numeric" placeholder="10-digit mobile" value="${esc(opts.mobile||"")}"/>
+      <div id="pmMsg" class="mini" style="margin-top:8px;color:var(--red)"></div>
+      <button id="pmPayBtn" class="btn primary full" style="margin-top:14px">Pay ₹${PLAN_PRICE_INR} &amp; Get ${PLAN_CONTACTS} Contacts</button>
+      <div id="pmResult"></div>
+      <div class="mini" style="margin-top:10px">Secure checkout via Razorpay. Your contacts are added to your database automatically the moment payment is confirmed.</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.onclick = e => { if(e.target === overlay) close(); };
+  document.getElementById("pmClose").onclick = close;
+
+  document.getElementById("pmPayBtn").onclick = async () => {
+    const name = document.getElementById("pmName").value.trim();
+    const email = document.getElementById("pmEmail").value.trim().toLowerCase();
+    const mobile = document.getElementById("pmMobile").value.trim();
+    const msg = document.getElementById("pmMsg");
+    if(!name || !email || !mobile){ msg.textContent = "All fields are required."; return; }
+    if(!isValidEmail(email)){ msg.textContent = "Enter a valid email address."; return; }
+    if(!isValidMobile(mobile)){ msg.textContent = "Enter a valid 10-digit mobile number."; return; }
+    msg.textContent = "";
+
+    if(RAZORPAY_KEY_ID.indexOf("RAZORPAY_KEY_ID_HERE") === 0){
+      msg.style.color = "var(--red)";
+      msg.textContent = "Payment gateway not configured yet — the admin needs to paste a Razorpay Key ID into index.html (RAZORPAY_KEY_ID).";
+      return;
+    }
+
+    const payBtn = document.getElementById("pmPayBtn");
+    payBtn.disabled = true; payBtn.textContent = "Loading secure checkout…";
+    try{ await loadRazorpayScript(); }
+    catch(e){ msg.textContent = e.message; payBtn.disabled=false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`; return; }
+
+    const rp = new Razorpay({
+      key: RAZORPAY_KEY_ID,
+      amount: PLAN_PRICE_INR * 100, // paise
+      currency: "INR",
+      name: "Cloud Call Master",
+      description: `${PLAN_CONTACTS} Contacts Package`,
+      prefill: { name, email, contact: mobile },
+      theme: { color: "#f5c542" },
+      handler: async (response) => {
+        payBtn.textContent = "Confirming payment…";
+        const pin = generatePin();
+        const r = await api("selfpurchasecontacts", {
+          name, email, mobile, pin,
+          planContacts: PLAN_CONTACTS, planPriceInr: PLAN_PRICE_INR,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_order_id: response.razorpay_order_id || "",
+          razorpay_signature: response.razorpay_signature || ""
+        });
+        if(!r.ok){
+          document.getElementById("pmResult").innerHTML = `<div class="notice danger" style="margin-top:12px">Payment received but activation failed: ${esc(r.error||"backend not set up yet")}. Save this Payment ID and share it with support: <b>${esc(response.razorpay_payment_id)}</b></div>`;
+          payBtn.disabled = false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`;
+          return;
+        }
+        localStorage.setItem(LS_LAST_PURCHASE, JSON.stringify({ username:r.username||email, pin:r.pin||pin, assigned:r.assigned||PLAN_CONTACTS, ts:Date.now() }));
+        document.getElementById("pmResult").innerHTML = `
+          <div class="credential-card">
+            <div class="row"><span class="cl">Login ID (email)</span><span class="cv">${esc(r.username||email)}</span></div>
+            <div class="row"><span class="cl">PIN</span><span class="cv">${esc(r.pin||pin)}</span></div>
+            <div class="row"><span class="cl">Contacts assigned</span><span class="cv">${esc(r.assigned||PLAN_CONTACTS)}</span></div>
+          </div>
+          <div class="mini" style="margin-top:10px">Save these — you'll need them to log in as a Field User.</div>
+          <button class="btn dark full" id="pmCopyCreds" style="margin-top:10px">Copy Login ID &amp; PIN</button>
+        `;
+        payBtn.classList.add("hidden");
+        document.getElementById("pmCopyCreds").onclick = () => copyToClipboard(`Login ID: ${r.username||email}\nPIN: ${r.pin||pin}`);
+        if(typeof opts.onDone === "function") opts.onDone();
+      },
+      modal: { ondismiss: () => { payBtn.disabled=false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`; } }
+    });
+    rp.on("payment.failed", () => { msg.textContent = "Payment failed — please try again."; payBtn.disabled=false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`; });
+    rp.open();
+  };
 }
 
 function usageBadgeHtml(){
@@ -474,11 +641,18 @@ function renderUser(){
         </div>
         <div class="toolbar">
           <span class="badge">${done}/${total} worked</span>
+          <button id="downloadMyReportBtn" class="btn dark small">⬇ Download My Report</button>
           <button id="openLinksBtn" class="btn dark small">🔗 Share Links</button>
           <button id="openDrawerBtn" class="btn dark small queue-toggle">☰ Queue (${total})</button>
           <button id="logoutBtn" class="btn ghost small">Logout</button>
         </div>
       </div>
+
+      ${(total>0 && done>=total) ? `
+      <div class="glass repurchase-banner">
+        <div class="r-text"><b>🎉 You've completed all ${total} contacts!</b><span>Buy ${PLAN_CONTACTS} more contacts for ₹${PLAN_PRICE_INR} and keep going.</span></div>
+        <button id="repurchaseBtn" class="btn primary small">Buy ${PLAN_CONTACTS} More — ₹${PLAN_PRICE_INR}</button>
+      </div>` : ""}
 
       ${ui.showLinksPanel ? `
       <div class="glass section">
@@ -528,7 +702,8 @@ function renderUser(){
         <main>
           ${rec ? `
           <div class="call-card">
-            <div class="card-top">
+            <button id="backToListBtn" class="back-btn">◀ Back to List</button>
+            <div class="card-top" style="margin-top:10px">
               <div>
                 <div class="name">${esc(rec.Name||"Unnamed")}</div>
                 <div class="phone-row">
@@ -582,6 +757,18 @@ function renderUser(){
 
   bindUsageBadge();
   document.getElementById("logoutBtn").onclick = () => { session=null; saveSession(); renderLogin(); };
+
+  const downloadMyReportBtn = document.getElementById("downloadMyReportBtn");
+  if(downloadMyReportBtn) downloadMyReportBtn.onclick = downloadMyReportCSV;
+
+  const backToListBtn = document.getElementById("backToListBtn");
+  if(backToListBtn) backToListBtn.onclick = () => { ui.drawerOpen = true; renderUser(); };
+
+  const repurchaseBtn = document.getElementById("repurchaseBtn");
+  if(repurchaseBtn) repurchaseBtn.onclick = () => openPurchaseModal({
+    name: session.fullName, email: isValidEmail(session.username) ? session.username : "",
+    onDone: () => boot()
+  });
 
   const openLinksBtn = document.getElementById("openLinksBtn");
   if(openLinksBtn) openLinksBtn.onclick = () => { ui.showLinksPanel = !ui.showLinksPanel; renderUser(); };
@@ -777,6 +964,36 @@ function renderAdmin(){
         </div>
         ${contacts.length>500 ? `<div class="mini" style="margin-top:8px">Showing first 500 of ${contacts.length} rows. Use Download CSV for the full list.</div>` : ""}
       </div>
+
+      <div class="glass section">
+        <div class="section-title"><span>6. Payment Plans &amp; Self-Service Packages</span></div>
+        <div class="glass plan-card">
+          <span class="plan-badge">MOST POPULAR</span>
+          <div class="plan-name">Field Agent Starter Pack</div>
+          <div class="plan-price">₹${PLAN_PRICE_INR} <span>/ one-time</span></div>
+          <ul>
+            <li><b>${PLAN_CONTACTS} verified contacts</b> assigned instantly</li>
+            <li>Unique login <b>ID (your email)</b> + auto-generated <b>PIN</b></li>
+            <li>Full calling suite — call, WhatsApp, SMS, status tracking</li>
+            <li>Repeat anytime: finish your ${PLAN_CONTACTS} and top up again for ₹${PLAN_PRICE_INR}</li>
+          </ul>
+          <button id="adminNewPurchaseBtn" class="btn primary full" style="margin-top:16px">🔒 Take a Payment &amp; Create New Package</button>
+        </div>
+        <div class="notice" style="margin-top:12px">
+          Payments run through Razorpay Checkout. Paste your <b>Razorpay Key ID</b> into the
+          <code>RAZORPAY_KEY_ID</code> constant near the top of this file's script. Real activation
+          also needs a matching <b>"selfpurchasecontacts"</b> action on your Apps Script backend that
+          (1) verifies the payment signature server-side, (2) creates/updates the field user row using
+          the buyer's email as username and the generated PIN, (3) assigns the next ${PLAN_CONTACTS}
+          unassigned contact rows to that username, and (4) returns <code>{ ok:true, username, pin, assigned }</code>.
+          This keeps real money and real contact data safe from being handed out without a genuine,
+          verified payment.
+        </div>
+        <div class="section-title" style="margin-top:16px"><span>Package Holders</span>
+          <button id="refreshPackagesBtn" class="btn dark small">Refresh</button>
+        </div>
+        <div id="packagesBox" class="mini">Click Refresh to see who has purchased a contact package and how many they've worked through.</div>
+      </div>
     </div>
   `;
 
@@ -839,7 +1056,32 @@ function renderAdmin(){
   document.getElementById("refreshReportBtn").onclick = loadReport;
   document.getElementById("downloadCsvBtn").onclick = downloadCSV;
 
+  document.getElementById("adminNewPurchaseBtn").onclick = () => openPurchaseModal({ onDone: () => boot() });
+  document.getElementById("refreshPackagesBtn").onclick = loadPackages;
+
   loadUserList();
+}
+
+/* Package holders = every field user, with how many contacts they're
+   carrying and how many they've already worked (Status != Pending), so
+   the admin can see at a glance who's finished their pack and is likely
+   to repurchase. */
+async function loadPackages(){
+  const box = document.getElementById("packagesBox");
+  if(!box) return;
+  box.innerHTML = "Loading…";
+  const r = await api("listusers", { username:session.username, pin:session.pin });
+  if(!r.ok){ box.innerHTML = esc(r.error||"Could not load users"); return; }
+  const rows = r.users.filter(u => u.role !== "admin").map(u => {
+    const uname = String(u.username||"").trim().toLowerCase();
+    const mine = contacts.filter(c => String(c.AssignedTo||"").trim().toLowerCase() === uname);
+    const worked = mine.filter(c => c.Status && c.Status !== "Pending").length;
+    const done = mine.length>0 && worked>=mine.length;
+    return `<tr><td>${esc(u.username)}</td><td>${esc(u.fullName)}</td><td>${mine.length}</td><td>${worked}</td>
+      <td>${done ? '<span class="badge" style="background:rgba(37,211,102,.18);color:#9df3c4;border-color:rgba(37,211,102,.3)">Eligible to repurchase</span>' : '<span class="badge">In progress</span>'}</td></tr>`;
+  }).join("");
+  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Assigned</th><th>Worked</th><th>Status</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5">No field users yet — packages will appear here once purchased.</td></tr>'}</tbody></table></div>`;
 }
 
 async function loadUserList(){
@@ -901,6 +1143,25 @@ function downloadCSV(){
   a.download = `cloud-call-master-report-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+/* Field user "Download My Report" — gives the logged-in user every field of
+   every contact assigned to them (their complete slice of the database),
+   not just what's on screen, so they always have an offline copy. */
+function downloadMyReportCSV(){
+  const mine = assignedContacts();
+  if(!mine.length) return showToast("No contacts assigned to you yet");
+  const headers = ["ID","Name","Mobile","Alt","Address","Status","Remarks","AssignedTo","UpdatedAt","UpdatedBy"];
+  const csv = [headers.join(",")].concat(
+    mine.map(r => headers.map(h => `"${String(r[h] ?? "").replace(/"/g,'""')}"`).join(","))
+  ).join("\n");
+  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${session.username}-my-contacts-report-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast(`Downloaded ${mine.length} contacts`);
 }
 
 /* ---------------------- file upload: robust header matching ---------------------- */

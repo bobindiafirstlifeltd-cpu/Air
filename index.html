@@ -233,6 +233,16 @@ tr.row-hidden{opacity:.4}
 .credential-card .row:last-child{border-bottom:0}
 .credential-card .cl{font-size:11px;color:var(--muted)}
 .credential-card .cv{font-size:16px;font-weight:900;color:var(--gold);word-break:break-all}
+
+/* ---- Bulk WhatsApp ---- */
+.bulkwa-current{background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.25);border-radius:16px;
+  padding:14px;margin-top:10px}
+.bulkwa-current .bw-name{font-size:17px;font-weight:900}
+.bulkwa-current .bw-phone{font-size:13px;color:var(--muted);margin-top:2px}
+.bulkwa-list{max-height:180px;overflow:auto;margin-top:10px;border:1px solid var(--line);border-radius:12px}
+.bulkwa-list .bwrow{display:flex;justify-content:space-between;padding:7px 10px;font-size:12px;border-bottom:1px solid var(--line)}
+.bulkwa-list .bwrow:last-child{border-bottom:0}
+.bulkwa-list .bwrow.sent{opacity:.4;text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -276,7 +286,23 @@ let session = JSON.parse(localStorage.getItem(LS_SESSION) || "null");
 let contacts = [];
 let usageCount = null;
 let usageBadgeDismissed = sessionStorage.getItem("ccm_usage_dismissed") === "1";
-let ui = { currentIndex:0, statusFilter:"All", search:"", drawerOpen:false, showLinksPanel:false, dirty:false };
+let ui = { currentIndex:0, statusFilter:"All", search:"", drawerOpen:false, showLinksPanel:false, showBulkWaPanel:false, bulkWaTemplate:"Hello {name}, this is regarding your policy enquiry. Let us know if you have any questions!", dirty:false };
+
+/* ---------------------- Bulk WhatsApp: sent-tracking (per user, per device) ----------------------
+   WhatsApp has no public API for unattended bulk sending — automating the
+   final "Send" tap would violate WhatsApp's terms and risk the number
+   being banned. This instead gives a fast one-click-per-contact flow: open
+   WhatsApp pre-filled → user taps Send in WhatsApp → click "Next" here.
+   Each contact is remembered as sent so nobody gets messaged twice. */
+const LS_BULKWA_PREFIX = "ccm_bulkwa_sent_";
+function bulkWaKey(){ return LS_BULKWA_PREFIX + (session ? session.username : "guest"); }
+function getBulkWaSent(){ return JSON.parse(localStorage.getItem(bulkWaKey()) || "[]").map(String); }
+function markBulkWaSent(id){ const s = getBulkWaSent(); if(!s.includes(String(id))){ s.push(String(id)); localStorage.setItem(bulkWaKey(), JSON.stringify(s)); } }
+function resetBulkWaSent(){ localStorage.removeItem(bulkWaKey()); }
+function bulkWaQueue(){
+  const sent = getBulkWaSent();
+  return assignedContacts().filter(c => cleanNumber(c.Mobile).length >= 12 && !sent.includes(String(c.ID)));
+}
 
 /* ---------------------- small helpers ---------------------- */
 function showToast(msg, ms=2600){
@@ -618,6 +644,42 @@ function shareLinkKey(key){ return LS_PROFILE_PREFIX + key + "_" + session.usern
 function getShareLink(key){ return localStorage.getItem(shareLinkKey(key)) || ""; }
 function setShareLink(key, val){ localStorage.setItem(shareLinkKey(key), val); }
 
+function renderBulkWaPanel(){
+  const queue = bulkWaQueue();
+  const total = assignedContacts().filter(c => cleanNumber(c.Mobile).length >= 12).length;
+  const sentCount = total - queue.length;
+  const pct = total ? Math.round((sentCount/total)*100) : 0;
+  const next = queue[0] || null;
+  return `
+  <div class="glass section">
+    <div class="section-title"><span>📤 Bulk WhatsApp</span>
+      <button id="closeBulkWaBtn" class="icon-btn" title="Close">✕</button>
+    </div>
+    <div class="mini">Sends one contact at a time — WhatsApp itself requires a manual tap of Send, so this can't run unattended, but it's built to be as fast as one click per contact. Already-sent contacts are skipped automatically.</div>
+    <div class="label">Message template <span class="mini" style="display:inline">(use {name} for the contact's name)</span></div>
+    <textarea id="bulkWaTemplate">${esc(ui.bulkWaTemplate)}</textarea>
+    <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:linear-gradient(90deg,var(--green),#76f1ab)"></div></div>
+    <div class="mini" style="margin-top:6px">${sentCount} of ${total} messaged · ${queue.length} remaining</div>
+
+    ${next ? `
+    <div class="bulkwa-current">
+      <div class="bw-name">${esc(next.Name||"Unnamed")}</div>
+      <div class="bw-phone">${esc(next.Mobile||"")}</div>
+      <div class="toolbar" style="margin-top:10px">
+        <button id="bulkWaSendBtn" class="btn green">💬 Open WhatsApp &amp; Mark Sent</button>
+        <button id="bulkWaSkipBtn" class="btn ghost small">Skip</button>
+      </div>
+    </div>` : `<div class="notice" style="margin-top:12px">🎉 Everyone assigned to you with a valid mobile number has been messaged. Use "Reset Sent List" below if you want to run this campaign again (e.g. a new offer).</div>`}
+
+    <div class="bulkwa-list">
+      ${queue.slice(0,50).map(c => `<div class="bwrow"><span>${esc(c.Name||"Unnamed")}</span><span>${esc(c.Mobile||"")}</span></div>`).join("") || ""}
+    </div>
+    <div class="toolbar" style="margin-top:10px">
+      <button id="bulkWaResetBtn" class="btn dark small">↺ Reset Sent List</button>
+    </div>
+  </div>`;
+}
+
 function renderUser(){
   const list = filteredContacts();
   if(ui.currentIndex >= list.length) ui.currentIndex = 0;
@@ -642,6 +704,7 @@ function renderUser(){
         <div class="toolbar">
           <span class="badge">${done}/${total} worked</span>
           <button id="downloadMyReportBtn" class="btn dark small">⬇ Download My Report</button>
+          <button id="openBulkWaBtn" class="btn green small">📤 Bulk WhatsApp (${bulkWaQueue().length})</button>
           <button id="openLinksBtn" class="btn dark small">🔗 Share Links</button>
           <button id="openDrawerBtn" class="btn dark small queue-toggle">☰ Queue (${total})</button>
           <button id="logoutBtn" class="btn ghost small">Logout</button>
@@ -653,6 +716,8 @@ function renderUser(){
         <div class="r-text"><b>🎉 You've completed all ${total} contacts!</b><span>Buy ${PLAN_CONTACTS} more contacts for ₹${PLAN_PRICE_INR} and keep going.</span></div>
         <button id="repurchaseBtn" class="btn primary small">Buy ${PLAN_CONTACTS} More — ₹${PLAN_PRICE_INR}</button>
       </div>` : ""}
+
+      ${ui.showBulkWaPanel ? renderBulkWaPanel() : ""}
 
       ${ui.showLinksPanel ? `
       <div class="glass section">
@@ -771,7 +836,28 @@ function renderUser(){
   });
 
   const openLinksBtn = document.getElementById("openLinksBtn");
-  if(openLinksBtn) openLinksBtn.onclick = () => { ui.showLinksPanel = !ui.showLinksPanel; renderUser(); };
+  if(openLinksBtn) openLinksBtn.onclick = () => { ui.showLinksPanel = !ui.showLinksPanel; ui.showBulkWaPanel=false; renderUser(); };
+
+  const openBulkWaBtn = document.getElementById("openBulkWaBtn");
+  if(openBulkWaBtn) openBulkWaBtn.onclick = () => { ui.showBulkWaPanel = !ui.showBulkWaPanel; ui.showLinksPanel=false; renderUser(); };
+  const closeBulkWaBtn = document.getElementById("closeBulkWaBtn");
+  if(closeBulkWaBtn) closeBulkWaBtn.onclick = () => { ui.showBulkWaPanel = false; renderUser(); };
+  const bulkWaTemplate = document.getElementById("bulkWaTemplate");
+  if(bulkWaTemplate) bulkWaTemplate.oninput = () => { ui.bulkWaTemplate = bulkWaTemplate.value; };
+  const bulkWaSendBtn = document.getElementById("bulkWaSendBtn");
+  if(bulkWaSendBtn) bulkWaSendBtn.onclick = () => {
+    const c = bulkWaQueue()[0];
+    if(!c) return;
+    const num = cleanNumber(c.Mobile);
+    const msg = ui.bulkWaTemplate.replace(/\{name\}/gi, c.Name||"");
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
+    markBulkWaSent(c.ID);
+    renderUser();
+  };
+  const bulkWaSkipBtn = document.getElementById("bulkWaSkipBtn");
+  if(bulkWaSkipBtn) bulkWaSkipBtn.onclick = () => { const c = bulkWaQueue()[0]; if(c){ markBulkWaSent(c.ID); renderUser(); } };
+  const bulkWaResetBtn = document.getElementById("bulkWaResetBtn");
+  if(bulkWaResetBtn) bulkWaResetBtn.onclick = () => { if(confirm("Reset the sent list? Everyone will be eligible for the campaign again.")){ resetBulkWaSent(); renderUser(); } };
   const closeLinksBtn = document.getElementById("closeLinksBtn");
   if(closeLinksBtn) closeLinksBtn.onclick = () => { ui.showLinksPanel = false; renderUser(); };
   document.querySelectorAll("[data-save-link]").forEach(b => b.onclick = () => {

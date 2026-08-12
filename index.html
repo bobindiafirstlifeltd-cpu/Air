@@ -271,6 +271,14 @@ tr.row-hidden{opacity:.4}
 .corner-logout:hover{border-color:rgba(255,100,118,.5);color:#ffdfe3}
 @media (max-width:640px){ .corner-logout{padding:7px 11px;font-size:11px} }
 
+/* ---- Corner "buy access" button on the welcome/login screen ---- */
+.corner-buy{position:fixed;top:max(14px, env(safe-area-inset-top));right:max(14px, env(safe-area-inset-right));
+  z-index:500;display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--gold),#ffe58f);
+  color:#241a00;border:none;border-radius:999px;padding:9px 16px;font-weight:900;font-size:12px;
+  cursor:pointer;box-shadow:0 8px 22px rgba(245,197,66,.35)}
+.corner-buy:hover{filter:brightness(1.05)}
+@media (max-width:640px){ .corner-buy{padding:8px 12px;font-size:11px} }
+
 /* ---- Report modal ---- */
 .report-stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
 .report-stat-grid .rs{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
@@ -620,6 +628,7 @@ function bindUsageBadge(){
 function renderLogin(){
   let role = "user";
   app.innerHTML = `
+    <button id="cornerBuyBtn" class="corner-buy" title="Buy access to the contact database">💳 Buy Access — ₹${PLAN_PRICE_INR}</button>
     <div class="login-shell">
       <div class="glass login-box">
         <div class="login-head">
@@ -639,9 +648,14 @@ function renderLogin(){
           Admin username is always <b>admin</b>. Field users log in with the username and PIN the admin
           gave them. Ask your admin if you don't have one.
         </div>
+        <div class="notice" style="margin-top:10px">
+          New here? Tap <b>Buy Access</b> in the corner to purchase your own login instantly —
+          ₹${PLAN_PRICE_INR} gets you ${PLAN_CONTACTS} contacts to start calling right away.
+        </div>
       </div>
     </div>
   `;
+  document.getElementById("cornerBuyBtn").onclick = () => openPurchaseModal({});
   const roleUserBtn = document.getElementById("roleUserBtn");
   const roleAdminBtn = document.getElementById("roleAdminBtn");
   const userField = document.getElementById("loginUser");

@@ -3,12 +3,10 @@
   DEPLOY NOTES (GitHub Pages / any static host):
   1. This is a single static file — GitHub Pages, Netlify, Vercel, etc. all work as-is.
      GitHub Pages: push this file as index.html to a repo → Settings → Pages →
-     Deploy from branch → root. It's served over HTTPS automatically, which
-     Razorpay Checkout requires.
-  2. Two placeholders MUST be filled in below (search for them) or features
+     Deploy from branch → root. It's served over HTTPS automatically.
+  2. One placeholder MUST be filled in below (search for it) or features
      will silently no-op with a toast telling you what's missing:
-       - BACKEND_URL     → your deployed Google Apps Script Web App URL
-       - RAZORPAY_KEY_ID → your Razorpay Key ID (Settings → API Keys)
+       - BACKEND_URL → your deployed Google Apps Script Web App URL
   3. Login/loading speed is dominated by Google Apps Script's own response
      time (each call re-opens the Sheet), not by this front-end. This file
      already minimizes round trips (parallel requests, local caching of last
@@ -195,10 +193,6 @@ tr.row-active{background:rgba(245,197,66,.10)}
 .login-box{width:100%;max-width:420px;padding:20px}
 .login-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .mini{font-size:12px;color:var(--muted);line-height:1.5}
-.role-toggle{display:flex;gap:8px;margin-bottom:14px}
-.role-toggle button{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0b1324;
-  color:var(--text);cursor:pointer;font-weight:800;font-size:13px}
-.role-toggle button.on{background:linear-gradient(135deg,var(--gold),#ffe58f);color:#1b1600}
 .tag{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800;
   background:rgba(255,255,255,.08);color:var(--muted)}
 .tag.admin{background:rgba(245,197,66,.18);color:#ffe9a8}
@@ -256,19 +250,7 @@ tr.row-active{background:rgba(245,197,66,.10)}
   border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-weight:800;font-size:13px;cursor:pointer}
 .back-btn:hover{border-color:rgba(245,197,66,.4)}
 
-/* ---- Plan / package card ---- */
-.plan-card{position:relative;overflow:hidden;border-radius:22px;padding:20px;
-  background:linear-gradient(160deg,rgba(245,197,66,.16),rgba(96,165,250,.06));
-  border:1px solid rgba(245,197,66,.28)}
-.plan-card .plan-badge{position:absolute;top:14px;right:14px;background:linear-gradient(135deg,var(--green),#76f1ab);
-  color:#07220f;font-size:11px;font-weight:900;padding:4px 10px;border-radius:999px}
-.plan-card .plan-price{font-size:34px;font-weight:900;color:var(--gold);display:flex;align-items:baseline;gap:6px}
-.plan-card .plan-price span{font-size:14px;color:var(--muted);font-weight:700}
-.plan-card .plan-name{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#ffe9a8;font-weight:800;margin-bottom:6px}
-.plan-card ul{margin:12px 0 0;padding-left:18px;color:var(--muted);font-size:13px;line-height:1.9}
-.plan-card ul li b{color:var(--text)}
-
-/* ---- Completion / repurchase banner ---- */
+/* ---- Completion banner ---- */
 .repurchase-banner{background:linear-gradient(160deg,rgba(37,211,102,.16),rgba(96,165,250,.06));
   border:1px solid rgba(37,211,102,.3);border-radius:20px;padding:16px;margin-bottom:14px;
   display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -280,14 +262,6 @@ tr.row-active{background:rgba(245,197,66,.10)}
   align-items:center;justify-content:center;padding:16px}
 .modal-box{width:100%;max-width:440px;max-height:90vh;overflow:auto;padding:20px;position:relative}
 .modal-close{position:absolute;top:12px;right:12px}
-.credential-card{border:1px solid rgba(245,197,66,.35);border-radius:16px;padding:16px;margin-top:14px;
-  background:rgba(245,197,66,.08)}
-.credential-card .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
-  border-bottom:1px dashed var(--line)}
-.credential-card .row:last-child{border-bottom:0}
-.credential-card .cl{font-size:11px;color:var(--muted)}
-.credential-card .cv{font-size:16px;font-weight:900;color:var(--gold);word-break:break-all}
-
 /* ---- Bulk WhatsApp ---- */
 .bulkwa-current{background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.25);border-radius:16px;
   padding:14px;margin-top:10px}
@@ -298,22 +272,24 @@ tr.row-active{background:rgba(245,197,66,.10)}
 .bulkwa-list .bwrow:last-child{border-bottom:0}
 .bulkwa-list .bwrow.sent{opacity:.4;text-decoration:line-through}
 
-/* ---- Corner logout ---- */
+/* ---- Corner logout / home ---- */
 .corner-logout{position:fixed;top:max(14px, env(safe-area-inset-top));right:max(14px, env(safe-area-inset-right));
   z-index:500;display:flex;align-items:center;gap:6px;background:#0b1324;color:var(--text);
   border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:800;font-size:12px;
   cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .corner-logout:hover{border-color:rgba(255,100,118,.5);color:#ffdfe3}
-@media (max-width:640px){ .corner-logout{padding:7px 11px;font-size:11px} }
+.corner-home{position:fixed;top:max(14px, env(safe-area-inset-top));right:max(122px, calc(env(safe-area-inset-right) + 108px));
+  z-index:500;display:flex;align-items:center;gap:6px;background:#0b1324;color:var(--text);
+  border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:800;font-size:12px;
+  cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.corner-home:hover{border-color:rgba(245,197,66,.5);color:var(--gold)}
+@media (max-width:640px){ .corner-logout{padding:7px 11px;font-size:11px} .corner-home{padding:7px 11px;font-size:11px;right:max(96px, calc(env(safe-area-inset-right) + 90px))} }
 
-/* ---- Corner "buy access" button on the welcome/login screen ---- */
-.corner-buy{position:fixed;top:max(14px, env(safe-area-inset-top));right:max(14px, env(safe-area-inset-right));
-  z-index:500;display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--gold),#ffe58f);
-  color:#241a00;border:none;border-radius:999px;padding:9px 16px;font-weight:900;font-size:12px;
-  cursor:pointer;box-shadow:0 8px 22px rgba(245,197,66,.35)}
-.corner-buy:hover{filter:brightness(1.05)}
-@media (max-width:640px){ .corner-buy{padding:8px 12px;font-size:11px} }
-
+.admin-link{background:transparent;border:0;color:var(--muted);font-size:11px;font-weight:700;
+  text-decoration:underline;cursor:pointer;padding:4px 2px;letter-spacing:.02em}
+.admin-link:hover{color:var(--gold)}
+.login-mode-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px}
+.login-mode-title{font-weight:800;font-size:13px;color:#b8c7e8;text-transform:uppercase;letter-spacing:.06em}
 /* ---- Report modal ---- */
 .report-stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
 .report-stat-grid .rs{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
@@ -340,6 +316,7 @@ const LS_QUEUE_RETRY = "ccm_retry_queue_v1"; // failed updates waiting to sync
 const LS_PROFILE_PREFIX = "ccm_sharelink_"; // + key + username -> saved shareable link
 const LS_CACHE_CONTACTS_PREFIX = "ccm_cache_contacts_"; // + username -> {contacts, ts} last-known data for instant reload
 const LS_LASTPOS_PREFIX = "ccm_lastpos_"; // + username -> ID of the contact the user was last viewing/calling
+const LS_AUTOCALL_PREFIX = "ccm_autocall_state_"; // + username -> full Auto Call resume state (see below)
 
 /* ---------------------- Resume where you left off ----------------------
    Whenever the active contact card changes (opened, Next/Prev, tapped in
@@ -350,24 +327,146 @@ function lastPosKey(){ return LS_LASTPOS_PREFIX + (session ? session.username : 
 function saveLastPosition(id){ if(id!=null) localStorage.setItem(lastPosKey(), String(id)); }
 function getLastPosition(){ return localStorage.getItem(lastPosKey()); }
 
-/* ---------------------- Corner logout (fixed, same spot on every screen) ---------------------- */
+/* =====================================================================
+   AUTO CALL RESUME STATE — persisted per Field User
+   -----------------------------------------------------------------------
+   Keyed by username (LS_AUTOCALL_PREFIX + session.username) so User A's
+   position can never affect User B's — each Field User's saved state
+   lives under its own key and is only ever read/written while that user
+   is the logged-in session.
+
+   Stores (at minimum, per spec): user ID (the key itself), the ordered
+   list of contact IDs in the current Auto Call queue, the current
+   position, the current/last-processed contact ID, processed count,
+   Auto Call status (active/phase), the last action that touched the
+   state, and a timestamp. Contact IDs are the source of truth (never
+   raw array indexes), so a contact being edited/reordered elsewhere
+   can't cause a duplicate or skipped call.
+
+   Written immediately on every state-changing event (see saveAutoCallState
+   call sites) — never only on logout — and read back on boot() so a
+   refresh, browser close, lost connection, or logout/login all resume
+   from the exact same spot. Auto Call itself never auto-starts on
+   restore; the user still presses "Start Auto Call", which then
+   continues the restored queue instead of rebuilding from #1.
+   ===================================================================== */
+function autoCallStateKey(){ return LS_AUTOCALL_PREFIX + (session ? session.username : ""); }
+
+function saveAutoCallState(lastAction){
+  if(!session) return;
+  try{
+    const state = {
+      userId: session.username,
+      queueIds: autoCall.queue.map(c => c.ID),
+      pos: autoCall.pos,
+      processed: autoCall.processed,
+      currentContactId: (autoCall.queue[autoCall.pos] || {}).ID ?? null,
+      lastProcessedContactId: autoCall.pos > 0 ? ((autoCall.queue[autoCall.pos - 1] || {}).ID ?? null) : null,
+      active: autoCall.active,
+      phase: autoCall.phase,
+      lastAction: lastAction || null,
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(autoCallStateKey(), JSON.stringify(state));
+  }catch(e){ /* storage full/unavailable — Auto Call still works in-memory this session */ }
+}
+
+/* Rebuilds autoCall.queue/pos from the saved state, re-matched against the
+   freshest contact data (by ID, not index) so a status changed elsewhere
+   is respected. Never sets autoCall.active — resuming is always a
+   deliberate "Start Auto Call" tap, never automatic. */
+function loadAutoCallState(){
+  if(!session) return;
+  try{
+    const raw = localStorage.getItem(autoCallStateKey());
+    if(!raw) return;
+    const state = JSON.parse(raw);
+    if(!state || !Array.isArray(state.queueIds) || !state.queueIds.length) return;
+    const byId = {};
+    visibleContacts().forEach(c => { byId[String(c.ID)] = c; });
+    const rebuilt = state.queueIds.map(id => byId[String(id)]).filter(Boolean);
+    if(!rebuilt.length) return;
+    let pos = rebuilt.findIndex(c => String(c.ID) === String(state.currentContactId));
+    if(pos < 0 && state.lastProcessedContactId != null){
+      const lastIdx = rebuilt.findIndex(c => String(c.ID) === String(state.lastProcessedContactId));
+      pos = lastIdx >= 0 ? lastIdx + 1 : 0;
+    }
+    if(pos < 0) pos = Math.min(state.pos || 0, rebuilt.length - 1);
+    autoCall.queue = rebuilt;
+    autoCall.pos = Math.max(0, Math.min(pos, rebuilt.length));
+    autoCall.processed = state.processed || 0;
+    autoCall.active = false;
+    autoCall.phase = "idle";
+  }catch(e){ /* corrupt/unreadable state — Auto Call just starts fresh */ }
+}
+
+/* Explicit, confirmed-only reset. Never triggered automatically (not on
+   logout, not on refresh) — only this button clears a saved position. */
+function resetAutoCallPosition(){
+  if(!confirm("Reset your saved Auto Call position? The next time you start Auto Call it will restart from the beginning of your eligible list instead of resuming where you left off.")) return;
+  autoCall.queue = [];
+  autoCall.pos = 0;
+  autoCall.processed = 0;
+  autoCall.active = false;
+  autoCall.phase = "idle";
+  ui.lastManualContactId = null;
+  try{ localStorage.removeItem(autoCallStateKey()); }catch(e){}
+  showToast("Auto Call position reset.");
+  renderUser();
+}
+
+/* Marks that the field user deliberately jumped/navigated to a specific
+   contact (as opposed to Auto Call itself moving the cursor while
+   dialing). Read once by startAutoCall() to decide whether a fresh
+   queue should begin at this contact instead of resuming the old
+   saved position — then consumed (cleared) so it doesn't linger and
+   override a *later* resume. */
+function markManualJump(rec){ if(rec) ui.lastManualContactId = rec.ID; }
+
+/* ---------------------- Corner logout / home (fixed, same spot on every screen) ---------------------- */
 function cornerLogoutHtml(){
   return `<button id="cornerLogoutBtn" class="corner-logout" title="Log out">⏻ Logout</button>`;
+}
+function cornerHomeHtml(){
+  return `<button id="cornerHomeBtn" class="corner-home" title="Home">🏠 Home</button>`;
+}
+function bindCornerHome(){
+  const b = document.getElementById("cornerHomeBtn");
+  if(b) b.onclick = () => {
+    if(!session) return;
+    closeAutoCallModals();
+    if(session.role === "user"){
+      // "Home" for a Call User clears any open panel/drawer/filter and
+      // returns to the plain calling queue — it never logs out or loses
+      // the current record position.
+      ui.showBulkWaPanel = false;
+      ui.showQueueTable = false;
+      ui.showLinksPanel = false;
+      ui.drawerOpen = false;
+      ui.search = "";
+      ui.statusFilter = "All";
+    }
+    render();
+  };
 }
 function bindCornerLogout(){
   const b = document.getElementById("cornerLogoutBtn");
   if(b) b.onclick = () => {
     // Logging out is a signal the user wants this device clean — clear the
     // cached customer data (names/numbers) and drafts for this account so
-    // they don't linger in localStorage on a shared/lost device.
+    // they don't linger in localStorage on a shared/lost device. The Auto
+    // Call resume position and current-contact position are deliberately
+    // NOT cleared here: they must survive logout so the user resumes from
+    // the exact same spot next time they log in (only the explicit Reset
+    // Auto Call Position control may clear that).
     if(session){
+      saveAutoCallState("User logout");
       try{
         localStorage.removeItem(contactsCacheKey());
-        localStorage.removeItem(lastPosKey());
         localStorage.removeItem(draftKey());
       }catch(e){}
     }
-    session=null; saveSession(); renderLogin();
+    session=null; saveSession(); resetSessionUiState(); renderLogin();
   };
 }
 
@@ -437,26 +536,46 @@ let autoCall = {
   processed: 0,
   phase: "idle",          // idle | dialing | awaiting-return | disposition | followup | saving | save-error | completed
   dialedAt: 0,
+  restored: false,        // true once loadAutoCallState() has run for the current login (guards against re-running mid-session)
 };
 
 function autoCallIsEligible(c){ return !AUTO_CALL_TERMINAL_STATUSES.includes(c.Status || "Pending"); }
 
 function startAutoCall(){
   if(autoCall.active) return; // guards double-tap / double-bind
-  // Reuse the existing queue+position if a previous run was stopped mid-way
-  // (rule: Stop then Start should resume, not restart). Only rebuild fresh
-  // when there's nothing left to resume — i.e. first run, or a prior run
-  // finished/exhausted its queue.
-  if(!autoCall.queue.length || autoCall.pos >= autoCall.queue.length){
+
+  // Which contact is actually on screen right now? This reflects either a
+  // deliberate manual jump (search/tap/User Base/Next-Prev) or a restored
+  // resume position — both already flow through ui.currentIndex.
+  const currentRec = filteredContacts()[ui.currentIndex] || null;
+  const manualJumpActive = ui.lastManualContactId != null && currentRec && String(currentRec.ID) === String(ui.lastManualContactId);
+  const noResumableQueue = !autoCall.queue.length || autoCall.pos >= autoCall.queue.length;
+
+  // Rebuild the queue when there's nothing left to resume (first run, or a
+  // prior run finished/exhausted its queue) OR when a manual jump happened
+  // since the last resume point — a deliberate jump always wins over a
+  // stale saved position (never the other way around).
+  if(noResumableQueue || manualJumpActive){
     const eligible = visibleContacts().filter(autoCallIsEligible);
     if(!eligible.length){
       showToast("No eligible leads to call — everyone assigned to you is Not Interested, Do Not Call, Closed, or has an invalid number.");
       return;
     }
-    autoCall.queue = eligible;
+    // Rotate the eligible list so it STARTS at the currently displayed/
+    // jumped contact — e.g. jump to #47 → queue = [47,48,...,100,1,...,46].
+    // This guarantees Auto Call begins exactly where the user jumped and
+    // continues sequentially afterward, while still eventually covering
+    // every eligible contact instead of silently dropping the ones before
+    // the jump point.
+    const startId = currentRec ? currentRec.ID : null;
+    let k = startId != null ? eligible.findIndex(c => String(c.ID) === String(startId)) : -1;
+    if(k < 0) k = 0;
+    autoCall.queue = eligible.slice(k).concat(eligible.slice(0, k));
     autoCall.pos = 0;
     autoCall.processed = 0;
   }
+  ui.lastManualContactId = null; // consumed — this jump has now been honored, don't let it re-trigger a rebuild later
+
   autoCall.runId += 1;
   const runId = autoCall.runId;
   autoCall.active = true;
@@ -464,6 +583,7 @@ function startAutoCall(){
   ui.statusFilter = "All";
   ui.search = "";
   ui.drawerOpen = false;
+  saveAutoCallState("Auto Call started");
   renderUser();
   autoCallDialCurrent(runId);
 }
@@ -478,6 +598,7 @@ function stopAutoCall(){
   // "allow the currently active call to finish where technically
   // possible"). Its own save handler checks autoCall.active afterwards and
   // will not auto-dial the next number since it's now false.
+  saveAutoCallState("Auto Call stopped");
   showToast("Auto Call stopped. Your place in the queue is saved — press Start Auto Call to continue.");
   renderUser();
 }
@@ -499,9 +620,11 @@ function autoCallDialCurrent(runId){
 
   autoCall.phase = "dialing";
   renderUser();
+  saveAutoCallState("Contact selected"); // persist immediately — this is the position that must survive a refresh/crash mid-dial
   autoCall.dialedAt = Date.now();
   autoCall.phase = "awaiting-return";
   window.location.href = "tel:" + num; // same mechanism as the existing manual Call button/link
+  saveAutoCallState("Call initiated");
   renderUser();
 }
 
@@ -515,6 +638,7 @@ function handleAutoCallReturn(manual){
   const rec = autoCall.queue[autoCall.pos];
   if(!rec) return;
   autoCall.phase = "disposition";
+  saveAutoCallState("Call disconnected");
   renderUser();
   openAutoCallDispositionModal(rec, runId);
 }
@@ -555,7 +679,11 @@ function openAutoCallDispositionModal(rec, runId){
     const status = b.dataset.disp;
     overlay.remove();
     if(status === "Follow Up"){ openFollowUpModal(rec, runId); return; }
-    autoCallRecordDisposition(rec, status, rec.Remarks || "", runId);
+    const actionLabel = status === "No Answer" ? "Call Not Connected selected"
+      : status === "Not Interested" ? "Not Interested selected"
+      : status === "Interested" ? "Interest selected"
+      : `${status} selected`;
+    autoCallRecordDisposition(rec, status, rec.Remarks || "", runId, actionLabel);
   });
   document.getElementById("autoCallStopFromDisposition").onclick = () => { overlay.remove(); stopAutoCall(); };
 }
@@ -593,30 +721,39 @@ function openFollowUpModal(rec, runId){
     const remark = document.getElementById("fuRemark").value.trim();
     const composed = `Follow-up: ${dateLabel}${remark ? " — " + remark : ""}`;
     overlay.remove();
-    autoCallRecordDisposition(rec, "Follow Up", composed, runId);
+    autoCallRecordDisposition(rec, "Follow Up", composed, runId, "Follow-up saved");
   };
 }
 
 /* Saves via the existing saveRecord() — same duplicate-submission lock,
    same offline retry queue, same Saving/Saved/Failed pill as manual saves.
    Only advances the queue after a confirmed successful save. */
-async function autoCallRecordDisposition(rec, status, remarks, runId){
+async function autoCallRecordDisposition(rec, status, remarks, runId, actionLabel){
   if(runId !== autoCall.runId) return; // stale callback from a stopped/older run
   autoCall.phase = "saving";
+  saveAutoCallState(actionLabel || `${status} selected`);
   renderUser();
   await saveRecord(rec, status, remarks);
   if(runId !== autoCall.runId) return; // stopped/restarted while the save was in flight
 
   if(ui.saveState && String(ui.saveState.id) === String(rec.ID) && ui.saveState.phase === "error"){
     autoCall.phase = "save-error";
+    saveAutoCallState("Save failed — awaiting retry");
     renderUser();
     openAutoCallSaveErrorModal(rec, status, remarks, runId);
     return;
   }
 
+  // Contact completed: the same ID is never dialed again from this queue —
+  // advancing pos (not deleting from the array) keeps queueIds/pos stable
+  // for persistence while making re-dialing this ID impossible even if the
+  // page reloads mid-advance, since loadAutoCallState() resumes strictly
+  // AFTER lastProcessedContactId.
   autoCall.processed += 1;
   autoCall.pos += 1;
-  if(!autoCall.active){ autoCall.phase = "idle"; renderUser(); return; } // Stop was pressed during the save — honor it, don't dial next
+  saveAutoCallState("Contact completed");
+  if(!autoCall.active){ autoCall.phase = "idle"; saveAutoCallState("Auto Call stopped"); renderUser(); return; } // Stop was pressed during the save — honor it, don't dial next
+  saveAutoCallState("Next contact loaded");
   autoCallDialCurrent(runId);
 }
 
@@ -641,6 +778,7 @@ function autoCallFinish(runId){
   if(runId !== autoCall.runId) return;
   autoCall.active = false;
   autoCall.phase = "completed";
+  saveAutoCallState("Auto Call completed");
   renderUser();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -659,13 +797,19 @@ function autoCallFinish(runId){
 
 function renderAutoCallBanner(){
   if(!autoCall.active){
+    const hasSavedQueue = autoCall.queue.length > 0 && autoCall.pos < autoCall.queue.length;
+    const resumeRec = hasSavedQueue ? autoCall.queue[autoCall.pos] : null;
     return `
     <div class="glass autocall-banner">
       <div class="ac-left">
         <div class="ac-title">🚀 AUTO CALL</div>
         <div class="mini">Steps through your eligible leads one at a time — dial, log the result, repeat. You still tap once per call (phones require that); everything after is automatic.</div>
+        ${resumeRec ? `<div class="mini" style="margin-top:4px">Will resume from <b>${esc(resumeRec.Name || resumeRec.ID)}</b> (${autoCall.pos+1} / ${autoCall.queue.length}) unless you jump to a different contact first.</div>` : ""}
       </div>
-      <button id="startAutoCallBtn" class="btn primary">▶ START AUTO CALL</button>
+      <div class="ac-actions">
+        <button id="startAutoCallBtn" class="btn primary">▶ START AUTO CALL</button>
+        ${hasSavedQueue ? `<button id="resetAutoCallBtn" class="btn ghost small">↺ Reset Position</button>` : ""}
+      </div>
     </div>`;
   }
   const rec = autoCall.queue[autoCall.pos] || null;
@@ -689,21 +833,6 @@ function renderAutoCallBanner(){
     </div>
   </div>`;
 }
-
-/* =====================================================================
-   PAYMENT / SELF-SERVE CONTACT PACKAGE CONFIG
-   - PLAN_PRICE_INR / PLAN_CONTACTS define the package shown to buyers.
-   - RAZORPAY_KEY_ID must be your own LIVE/TEST Key ID from the Razorpay
-     dashboard (Settings → API Keys). It is safe to expose the Key ID in
-     client code (that's how Razorpay Checkout works) — never put your
-     Key SECRET here. Payment must still be verified on your Apps Script
-     backend (signature check) before contacts are handed out; see the
-     "selfpurchasecontacts" backend note further down this file.
-   ===================================================================== */
-const PLAN_PRICE_INR = 100;
-const PLAN_CONTACTS  = 500;
-const RAZORPAY_KEY_ID = "RAZORPAY_KEY_ID_HERE"; // <-- paste your Razorpay Key ID
-const LS_LAST_PURCHASE = "ccm_last_purchase_v1";
 
 /* ---------------------- Login attempt throttling ----------------------
    This is a DEVICE-side speed bump only — it slows down someone guessing
@@ -761,7 +890,19 @@ let session = JSON.parse(localStorage.getItem(LS_SESSION) || "null");
 let contacts = [];
 let usageCount = null;
 let usageBadgeDismissed = sessionStorage.getItem("ccm_usage_dismissed") === "1";
-let ui = { currentIndex:0, statusFilter:"All", search:"", drawerOpen:false, showLinksPanel:false, showBulkWaPanel:false, showQueueTable:false, bulkWaTemplate:"Hello {name}, this is regarding your policy enquiry. Let us know if you have any questions!", dirty:false, userBaseValue:"", saveState:null };
+let ui = { currentIndex:0, statusFilter:"All", search:"", drawerOpen:false, showLinksPanel:false, showBulkWaPanel:false, showQueueTable:false, bulkWaTemplate:"Hello {name}, this is regarding your policy enquiry. Let us know if you have any questions!", dirty:false, userBaseValue:"", saveState:null, lastManualContactId:null };
+
+/* Resets per-session UI + Auto Call in-memory state. Called on every
+   successful login and on logout so that switching Field Users on the
+   same device/tab can never leak one user's current record, Auto Call
+   queue, or position into another user's session (Multi-User Safety).
+   localStorage itself is already isolated per-username by key prefix;
+   this closes the matching gap for the in-memory objects that live for
+   the lifetime of the page. */
+function resetSessionUiState(){
+  ui = { currentIndex:0, statusFilter:"All", search:"", drawerOpen:false, showLinksPanel:false, showBulkWaPanel:false, showQueueTable:false, bulkWaTemplate: ui.bulkWaTemplate, dirty:false, userBaseValue:"", saveState:null, lastManualContactId:null, restoredPosition:false };
+  autoCall = { active:false, runId:(autoCall ? autoCall.runId : 0) + 1, queue:[], pos:0, processed:0, phase:"idle", dialedAt:0, restored:false };
+}
 let savingInFlight = false; // blocks duplicate Save submissions while a save is in flight
 
 /* ---------------------- Bulk WhatsApp: sent-tracking (per user, per device) ----------------------
@@ -879,124 +1020,6 @@ async function refreshUsage(){
   if(r.ok) usageCount = r.usageCount;
 }
 
-/* ---------------------- Self-serve contact package purchase ---------------------- */
-function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||"").trim()); }
-function isValidMobile(v){ return String(v||"").replace(/\D/g,"").length >= 10; }
-function generatePin(len=6){
-  let p;
-  do{
-    p = "";
-    for(let i=0;i<len;i++) p += Math.floor(Math.random()*10);
-  } while(weakPinReason(p));
-  return p;
-}
-function loadRazorpayScript(){
-  return new Promise((resolve, reject) => {
-    if(window.Razorpay) return resolve();
-    const s = document.createElement("script");
-    s.src = "https://checkout.razorpay.com/v1/checkout.js";
-    s.onload = resolve;
-    s.onerror = () => reject(new Error("Could not load payment gateway. Check your connection."));
-    document.body.appendChild(s);
-  });
-}
-
-/* Opens the "buy 500 contacts for ₹100" flow. Collects proper buyer
-   credentials (full name, email, mobile) BEFORE any payment is attempted,
-   then launches Razorpay Checkout. On successful payment it asks the
-   backend (action: "selfpurchasecontacts") to verify the payment, create
-   or top up the buyer's login, and auto-assign the next PLAN_CONTACTS
-   unassigned contacts to them. The buyer's email becomes their unique
-   login ID; a fresh PIN is generated automatically. */
-function openPurchaseModal(opts={}){
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
-  overlay.innerHTML = `
-    <div class="glass modal-box">
-      <button class="icon-btn modal-close" id="pmClose">✕</button>
-      <div class="section-title" style="margin-bottom:2px"><span>Buy ${PLAN_CONTACTS} Contacts — ₹${PLAN_PRICE_INR}</span></div>
-      <div class="mini" style="margin-bottom:12px">Enter your details to receive your login. Your email becomes your unique ID and a PIN is generated for you automatically once payment is confirmed.</div>
-      <div class="label">Full Name</div>
-      <input id="pmName" type="text" placeholder="e.g. Rajendra Kumar" value="${esc(opts.name||"")}"/>
-      <div class="label">Email (becomes your unique ID)</div>
-      <input id="pmEmail" type="text" placeholder="you@example.com" value="${esc(opts.email||"")}"/>
-      <div class="label">Mobile Number</div>
-      <input id="pmMobile" type="text" inputmode="numeric" placeholder="10-digit mobile" value="${esc(opts.mobile||"")}"/>
-      <div id="pmMsg" class="mini" style="margin-top:8px;color:var(--red)"></div>
-      <button id="pmPayBtn" class="btn primary full" style="margin-top:14px">Pay ₹${PLAN_PRICE_INR} &amp; Get ${PLAN_CONTACTS} Contacts</button>
-      <div id="pmResult"></div>
-      <div class="mini" style="margin-top:10px">Secure checkout via Razorpay. Your contacts are added to your database automatically the moment payment is confirmed.</div>
-    </div>`;
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.onclick = e => { if(e.target === overlay) close(); };
-  document.getElementById("pmClose").onclick = close;
-
-  document.getElementById("pmPayBtn").onclick = async () => {
-    const name = document.getElementById("pmName").value.trim();
-    const email = document.getElementById("pmEmail").value.trim().toLowerCase();
-    const mobile = document.getElementById("pmMobile").value.trim();
-    const msg = document.getElementById("pmMsg");
-    if(!name || !email || !mobile){ msg.textContent = "All fields are required."; return; }
-    if(!isValidEmail(email)){ msg.textContent = "Enter a valid email address."; return; }
-    if(!isValidMobile(mobile)){ msg.textContent = "Enter a valid 10-digit mobile number."; return; }
-    msg.textContent = "";
-
-    if(RAZORPAY_KEY_ID.indexOf("RAZORPAY_KEY_ID_HERE") === 0){
-      msg.style.color = "var(--red)";
-      msg.textContent = "Payment gateway not configured yet — the admin needs to paste a Razorpay Key ID into index.html (RAZORPAY_KEY_ID).";
-      return;
-    }
-
-    const payBtn = document.getElementById("pmPayBtn");
-    payBtn.disabled = true; payBtn.textContent = "Loading secure checkout…";
-    try{ await loadRazorpayScript(); }
-    catch(e){ msg.textContent = e.message; payBtn.disabled=false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`; return; }
-
-    const rp = new Razorpay({
-      key: RAZORPAY_KEY_ID,
-      amount: PLAN_PRICE_INR * 100, // paise
-      currency: "INR",
-      name: "Cloud Call Master",
-      description: `${PLAN_CONTACTS} Contacts Package`,
-      prefill: { name, email, contact: mobile },
-      theme: { color: "#f5c542" },
-      handler: async (response) => {
-        payBtn.textContent = "Confirming payment…";
-        const pin = generatePin();
-        const r = await api("selfpurchasecontacts", {
-          name, email, mobile, pin,
-          planContacts: PLAN_CONTACTS, planPriceInr: PLAN_PRICE_INR,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_order_id: response.razorpay_order_id || "",
-          razorpay_signature: response.razorpay_signature || ""
-        });
-        if(!r.ok){
-          document.getElementById("pmResult").innerHTML = `<div class="notice danger" style="margin-top:12px">Payment received but activation failed: ${esc(r.error||"backend not set up yet")}. Save this Payment ID and share it with support: <b>${esc(response.razorpay_payment_id)}</b></div>`;
-          payBtn.disabled = false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`;
-          return;
-        }
-        localStorage.setItem(LS_LAST_PURCHASE, JSON.stringify({ username:r.username||email, pin:r.pin||pin, assigned:r.assigned||PLAN_CONTACTS, ts:Date.now() }));
-        document.getElementById("pmResult").innerHTML = `
-          <div class="credential-card">
-            <div class="row"><span class="cl">Login ID (email)</span><span class="cv">${esc(r.username||email)}</span></div>
-            <div class="row"><span class="cl">PIN</span><span class="cv">${esc(r.pin||pin)}</span></div>
-            <div class="row"><span class="cl">Contacts assigned</span><span class="cv">${esc(r.assigned||PLAN_CONTACTS)}</span></div>
-          </div>
-          <div class="mini" style="margin-top:10px">Save these — you'll need them to log in as a Field User.</div>
-          <button class="btn dark full" id="pmCopyCreds" style="margin-top:10px">Copy Login ID &amp; PIN</button>
-        `;
-        payBtn.classList.add("hidden");
-        document.getElementById("pmCopyCreds").onclick = () => copyToClipboard(`Login ID: ${r.username||email}\nPIN: ${r.pin||pin}`);
-        if(typeof opts.onDone === "function") opts.onDone();
-      },
-      modal: { ondismiss: () => { payBtn.disabled=false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`; } }
-    });
-    rp.on("payment.failed", () => { msg.textContent = "Payment failed — please try again."; payBtn.disabled=false; payBtn.textContent = `Pay ₹${PLAN_PRICE_INR} & Get ${PLAN_CONTACTS} Contacts`; });
-    rp.open();
-  };
-}
-
 function usageBadgeHtml(){
   if(usageBadgeDismissed || usageCount===null) return "";
   return `<span class="usage-badge" id="usageBadge">👁 Usage <b>${usageCount}</b><span class="x" id="usageDismiss" title="Hide this">✕</span></span>`;
@@ -1010,38 +1033,54 @@ function bindUsageBadge(){
 function renderLogin(){
   let role = "user";
   app.innerHTML = `
-    <button id="cornerBuyBtn" class="corner-buy" title="Buy access to the contact database">💳 Buy Access — ₹${PLAN_PRICE_INR}</button>
     <div class="login-shell">
       <div class="glass login-box">
         <div class="login-head">
           <div class="logo">CCM</div>
           <div><div class="title">Cloud Call Master</div><div class="sub">Smart calling suite, powered by your Google Sheet</div></div>
         </div>
-        <div class="role-toggle">
-          <button id="roleUserBtn" class="on">I'm a Field User</button>
-          <button id="roleAdminBtn">I'm the Admin</button>
+        <div class="login-mode-row">
+          <div class="login-mode-title" id="loginModeTitle">Call User Login</div>
+          <button id="adminLoginLink" class="admin-link" type="button">Admin Access</button>
         </div>
         <div class="label">Username</div>
         <input id="loginUser" type="text" placeholder="e.g. rajendra1" autocomplete="off"/>
-        <div class="label">PIN</div>
+        <div class="label" id="loginPinLabel">PIN</div>
         <input id="loginPin" type="password" placeholder="4-6 digit PIN" inputmode="numeric"/>
         <button id="loginBtn" class="btn primary full" style="margin-top:14px">Log in</button>
-        <div class="notice" style="margin-top:14px">
-          Field users log in with the username and PIN their admin gave them. Ask your admin if you don't have one.
-        </div>
-        <div class="notice" style="margin-top:10px">
-          New here? Tap <b>Buy Access</b> in the corner to purchase your own login instantly —
-          ₹${PLAN_PRICE_INR} gets you ${PLAN_CONTACTS} contacts to start calling right away.
+        <div class="notice" style="margin-top:14px" id="loginHelpNotice">
+          Call Users log in with the username and PIN their admin gave them. Ask your admin if you don't have one.
         </div>
       </div>
     </div>
   `;
-  document.getElementById("cornerBuyBtn").onclick = () => openPurchaseModal({});
-  const roleUserBtn = document.getElementById("roleUserBtn");
-  const roleAdminBtn = document.getElementById("roleAdminBtn");
+  const adminLoginLink = document.getElementById("adminLoginLink");
+  const loginModeTitle = document.getElementById("loginModeTitle");
+  const loginHelpNotice = document.getElementById("loginHelpNotice");
+  const loginPinLabel = document.getElementById("loginPinLabel");
   const userField = document.getElementById("loginUser");
-  roleUserBtn.onclick = () => { role="user"; roleUserBtn.classList.add("on"); roleAdminBtn.classList.remove("on"); userField.disabled=false; userField.value=""; userField.placeholder="e.g. rajendra1"; };
-  roleAdminBtn.onclick = () => { role="admin"; roleAdminBtn.classList.add("on"); roleUserBtn.classList.remove("on"); userField.value="admin"; userField.disabled=true; };
+  const pinField = document.getElementById("loginPin");
+  const setRole = (r) => {
+    role = r;
+    if(role === "admin"){
+      loginModeTitle.textContent = "Admin Access";
+      adminLoginLink.textContent = "← Back to Call User Login";
+      userField.value = "1022592"; userField.disabled = true;
+      loginPinLabel.textContent = "Password";
+      pinField.placeholder = "Admin password";
+      pinField.inputMode = "text";
+      loginHelpNotice.textContent = "Authorized administrators only.";
+    } else {
+      loginModeTitle.textContent = "Call User Login";
+      adminLoginLink.textContent = "Admin Access";
+      userField.disabled = false; userField.value = ""; userField.placeholder = "e.g. rajendra1";
+      loginPinLabel.textContent = "PIN";
+      pinField.placeholder = "4-6 digit PIN";
+      pinField.inputMode = "numeric";
+      loginHelpNotice.textContent = "Call Users log in with the username and PIN their admin gave them. Ask your admin if you don't have one.";
+    }
+  };
+  adminLoginLink.onclick = () => setRole(role === "admin" ? "user" : "admin");
 
   const doLogin = async () => {
     const username = document.getElementById("loginUser").value.trim();
@@ -1067,8 +1106,9 @@ function renderLogin(){
     btn.disabled = false; btn.textContent = "Log in";
     if(!r.ok){ recordFailedLogin(username); return showToast(r.error || "Login failed"); }
     clearLoginAttempts(username);
-    session = { username:r.username, role:r.role, fullName:r.fullName || r.username, pin };
+    session = { username:r.username, role:r.role, fullName:r.fullName || r.username, location:r.location || "", pin };
     saveSession();
+    resetSessionUiState(); // fresh in-memory state per login — never carry over another user's current record/Auto Call queue
     showToast(`Welcome, ${session.fullName}`);
     boot();
   };
@@ -1111,6 +1151,7 @@ async function boot(){
   const cached = getCachedContacts();
   if(cached && Array.isArray(cached.contacts)){
     contacts = cached.contacts;
+    if(!autoCall.restored){ autoCall.restored = true; loadAutoCallState(); }
     render();
   } else {
     app.innerHTML = `<div class="wrap"><div class="notice" id="bootNotice">Loading your data from Google Sheet…</div></div>`;
@@ -1139,6 +1180,7 @@ async function boot(){
     contacts = contactsRes.contacts || [];
     setCachedContacts(contacts);
     if(usageRes.ok) usageCount = usageRes.usageCount;
+    if(!autoCall.restored){ autoCall.restored = true; loadAutoCallState(); }
     render();
     flushRetryQueue();
   }catch(err){
@@ -1182,10 +1224,13 @@ function filteredContacts(){
   return list;
 }
 /* ---------------------- Record navigation (buttons + keyboard share this) ---------------------- */
-function goNextRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = (ui.currentIndex+1) % Math.max(list.length,1); renderUser(); }
-function goPrevRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = (ui.currentIndex-1+list.length) % Math.max(list.length,1); renderUser(); }
-function goFirstRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; ui.currentIndex = 0; renderUser(); }
-function goLastRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = Math.max(list.length-1,0); renderUser(); }
+/* Each of these is a deliberate manual navigation, so it marks a manual
+   jump — read once by startAutoCall() to decide whether Auto Call should
+   begin at this contact instead of resuming the old saved position. */
+function goNextRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = (ui.currentIndex+1) % Math.max(list.length,1); markManualJump(list[ui.currentIndex]); renderUser(); }
+function goPrevRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = (ui.currentIndex-1+list.length) % Math.max(list.length,1); markManualJump(list[ui.currentIndex]); renderUser(); }
+function goFirstRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; ui.currentIndex = 0; markManualJump(filteredContacts()[0]); renderUser(); }
+function goLastRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = Math.max(list.length-1,0); markManualJump(list[ui.currentIndex]); renderUser(); }
 
 /* ---------------------- USER BASE: jump directly to a customer by their ID ----------------------
    Looks up the ID against everything assigned to this user (ignoring the
@@ -1202,6 +1247,7 @@ function loadByUserBase(raw){
   const idx = filteredContacts().findIndex(c => String(c.ID) === String(match.ID));
   ui.currentIndex = idx >= 0 ? idx : 0;
   ui.drawerOpen = false;
+  markManualJump(match);
   renderUser();
   showToast(`Loaded customer ${match.ID} — ${match.Name || "Unnamed"}`);
 }
@@ -1319,6 +1365,7 @@ function renderUser(){
   const acBusy = autoCall.active && autoCall.phase !== "idle";
 
   app.innerHTML = `
+    ${cornerHomeHtml()}
     ${cornerLogoutHtml()}
     <div class="wrap">
       <div class="glass topbar">
@@ -1326,7 +1373,7 @@ function renderUser(){
           <div class="logo">CCM</div>
           <div>
             <div class="title">Cloud Call Master</div>
-            <div class="sub">${esc(session.fullName)} <span class="tag">field user</span> ${usageBadgeHtml()}</div>
+            <div class="sub">${esc(session.fullName)} <span class="tag">call user</span> ${session.location ? `<span class="tag">📍 ${esc(session.location)}</span>` : ""} ${usageBadgeHtml()}</div>
           </div>
         </div>
         <div class="toolbar">
@@ -1344,9 +1391,15 @@ function renderUser(){
 
       ${(total>0 && done>=total) ? `
       <div class="glass repurchase-banner">
-        <div class="r-text"><b>🎉 You've completed all ${total} contacts!</b><span>Buy ${PLAN_CONTACTS} more contacts for ₹${PLAN_PRICE_INR} and keep going.</span></div>
-        <button id="repurchaseBtn" class="btn primary small">Buy ${PLAN_CONTACTS} More — ₹${PLAN_PRICE_INR}</button>
+        <div class="r-text"><b>🎉 You've completed all ${total} contacts assigned to you!</b><span>Ask your admin to assign more contacts to keep going.</span></div>
       </div>` : ""}
+
+      <div class="stat-grid" style="margin-bottom:14px">
+        <div class="stat"><div class="n">${total}</div><div class="l">Contacts Assigned</div></div>
+        <div class="stat"><div class="n">${done}</div><div class="l">Completed</div></div>
+        <div class="stat"><div class="n">${total-done}</div><div class="l">Remaining</div></div>
+        <div class="stat"><div class="n">${pct}%</div><div class="l">Daily Progress</div></div>
+      </div>
 
       ${ui.showBulkWaPanel ? renderBulkWaPanel() : ""}
       ${ui.showQueueTable ? renderQueueTablePanel() : ""}
@@ -1473,6 +1526,7 @@ function renderUser(){
   `;
 
   bindUsageBadge();
+  bindCornerHome();
   bindCornerLogout();
 
   const myReportBtn = document.getElementById("myReportBtn");
@@ -1483,12 +1537,6 @@ function renderUser(){
 
   const backToListBtn = document.getElementById("backToListBtn");
   if(backToListBtn) backToListBtn.onclick = () => { ui.drawerOpen = true; renderUser(); };
-
-  const repurchaseBtn = document.getElementById("repurchaseBtn");
-  if(repurchaseBtn) repurchaseBtn.onclick = () => openPurchaseModal({
-    name: session.fullName, email: isValidEmail(session.username) ? session.username : "",
-    onDone: () => boot()
-  });
 
   const openLinksBtn = document.getElementById("openLinksBtn");
   if(openLinksBtn) openLinksBtn.onclick = () => { ui.showLinksPanel = !ui.showLinksPanel; ui.showBulkWaPanel=false; ui.showQueueTable=false; renderUser(); };
@@ -1505,6 +1553,7 @@ function renderUser(){
   document.querySelectorAll("[data-open-qi]").forEach(b => b.onclick = () => {
     ui.currentIndex = Number(b.dataset.openQi);
     ui.showQueueTable = false;
+    markManualJump(filteredContacts()[ui.currentIndex]);
     renderUser();
   });
 
@@ -1522,6 +1571,8 @@ function renderUser(){
 
   const startAutoCallBtn = document.getElementById("startAutoCallBtn");
   if(startAutoCallBtn) startAutoCallBtn.onclick = startAutoCall;
+  const resetAutoCallBtn = document.getElementById("resetAutoCallBtn");
+  if(resetAutoCallBtn) resetAutoCallBtn.onclick = resetAutoCallPosition;
   const stopAutoCallBtn = document.getElementById("stopAutoCallBtn");
   if(stopAutoCallBtn) stopAutoCallBtn.onclick = stopAutoCall;
   const autoCallManualReturnBtn = document.getElementById("autoCallManualReturnBtn");
@@ -1568,7 +1619,7 @@ function renderUser(){
     sb.oninput = e => { ui.search=e.target.value; ui.currentIndex=0; renderUser(); focusEnd("searchBox"); };
   }
   const sf = document.getElementById("statusFilter"); if(sf) sf.onchange = e => { ui.statusFilter=e.target.value; ui.currentIndex=0; renderUser(); };
-  document.querySelectorAll(".record[data-i]").forEach(el => el.onclick = () => { ui.currentIndex = Number(el.dataset.i); ui.drawerOpen=false; renderUser(); });
+  document.querySelectorAll(".record[data-i]").forEach(el => el.onclick = () => { ui.currentIndex = Number(el.dataset.i); ui.drawerOpen=false; markManualJump(filteredContacts()[ui.currentIndex]); renderUser(); });
 
   if(rec){
     const currentRemarks = () => { const r = document.getElementById("remarksBox"); return r ? r.value : draftText; };
@@ -1665,6 +1716,7 @@ function renderAdmin(){
   const adminHidden = getHiddenIds().map(String);
 
   app.innerHTML = `
+    ${cornerHomeHtml()}
     ${cornerLogoutHtml()}
     <div class="wrap">
       <div class="glass topbar">
@@ -1692,7 +1744,17 @@ function renderAdmin(){
 
       <div class="glass section">
         <div class="section-title"><span>1. Upload / Replace Database</span></div>
-        <div class="mini">Upload a CSV or XLSX with columns for name, mobile, alt mobile and address — header names can vary (e.g. "Phone", "Mobile No", "Contact Number" all work), up to 10,000 rows.</div>
+        <div class="mini">Upload a CSV or XLSX with columns for name, mobile, alt mobile and address — header names can vary (e.g. "Phone", "Mobile No", "Contact Number" all work), up to 10,000 rows. If your file already has "Location" and "Source" columns those are used automatically; otherwise the values below are applied to every row in this batch.</div>
+        <div class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+          <div>
+            <div class="label" style="margin:0 0 6px">Location / Area for this batch</div>
+            <input id="uploadLocation" type="text" placeholder="e.g. Delhi – Rajendra Place"/>
+          </div>
+          <div>
+            <div class="label" style="margin:0 0 6px">Source for this batch</div>
+            <input id="uploadSource" type="text" placeholder="e.g. Website, Facebook Ads, Purchased List"/>
+          </div>
+        </div>
         <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" style="margin-top:10px"/>
         <div id="filePreview" class="mini" style="margin-top:10px"></div>
         <div class="toolbar" style="margin-top:10px">
@@ -1703,11 +1765,12 @@ function renderAdmin(){
       </div>
 
       <div class="glass section">
-        <div class="section-title"><span>2. Register / Manage Field Users</span></div>
-        <div class="row" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px">
+        <div class="section-title"><span>2. Register / Manage Call Users</span></div>
+        <div class="row" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px">
           <input id="newUsername" type="text" placeholder="Username (e.g. rajendra1)"/>
           <input id="newPin" type="text" placeholder="PIN (e.g. 4321)"/>
           <input id="newFullName" type="text" placeholder="Full name"/>
+          <input id="newLocation" type="text" placeholder="Assigned location (e.g. Delhi)"/>
           <button id="addUserBtn" class="btn green small">Add / Update</button>
         </div>
         <div id="userListBox" style="margin-top:12px"></div>
@@ -1715,13 +1778,14 @@ function renderAdmin(){
 
       <div class="glass section">
         <div class="section-title"><span>3. Assign Contacts to a User</span></div>
-        <div class="mini">Enter a username and the contact ID range you want to hand to them (from the report table below).</div>
+        <div class="mini">Enter a username and the contact ID range you want to hand to them (from the report table below). Optionally tag this assignment with a location — useful when a user's contacts come from more than one area.</div>
         <div class="row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px">
           <input id="assignFrom" type="text" placeholder="From ID (e.g. 1)"/>
           <input id="assignTo" type="text" placeholder="To ID (e.g. 500)"/>
           <button id="assignRunBtn" class="btn blue small">Assign</button>
         </div>
         <input id="assignUsername" type="text" placeholder="Assign to username" style="margin-top:8px"/>
+        <input id="assignLocation" type="text" placeholder="Location for this assignment (optional)" style="margin-top:8px"/>
       </div>
 
       <div class="glass section">
@@ -1741,10 +1805,10 @@ function renderAdmin(){
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Name</th><th>Mobile</th><th>Status</th><th>Assigned To</th><th>Updated By</th><th></th></tr></thead>
+            <thead><tr><th>ID</th><th>Name</th><th>Mobile</th><th>Location</th><th>Source</th><th>Status</th><th>Assigned To</th><th>Updated By</th><th></th></tr></thead>
             <tbody>
               ${contacts.slice(0,500).map(c=>`<tr class="${adminHidden.includes(String(c.ID))?'row-hidden':''}">
-                <td>${esc(c.ID)}</td><td>${esc(c.Name)}</td><td>${esc(c.Mobile)}</td><td>${esc(c.Status||"Pending")}</td>
+                <td>${esc(c.ID)}</td><td>${esc(c.Name)}</td><td>${esc(c.Mobile)}</td><td>${esc(c.Location||"—")}</td><td>${esc(c.Source||"—")}</td><td>${esc(c.Status||"Pending")}</td>
                 <td>${esc(c.AssignedTo||"—")}</td><td>${esc(c.UpdatedBy||"—")}</td>
                 <td>${adminHidden.includes(String(c.ID))
                   ? `<button class="btn dark tiny" data-restore-row="${esc(c.ID)}">Restore</button>`
@@ -1755,40 +1819,11 @@ function renderAdmin(){
         </div>
         ${contacts.length>500 ? `<div class="mini" style="margin-top:8px">Showing first 500 of ${contacts.length} rows. Use Download CSV for the full list.</div>` : ""}
       </div>
-
-      <div class="glass section">
-        <div class="section-title"><span>6. Payment Plans &amp; Self-Service Packages</span></div>
-        <div class="glass plan-card">
-          <span class="plan-badge">MOST POPULAR</span>
-          <div class="plan-name">Field Agent Starter Pack</div>
-          <div class="plan-price">₹${PLAN_PRICE_INR} <span>/ one-time</span></div>
-          <ul>
-            <li><b>${PLAN_CONTACTS} verified contacts</b> assigned instantly</li>
-            <li>Unique login <b>ID (your email)</b> + auto-generated <b>PIN</b></li>
-            <li>Full calling suite — call, WhatsApp, SMS, status tracking</li>
-            <li>Repeat anytime: finish your ${PLAN_CONTACTS} and top up again for ₹${PLAN_PRICE_INR}</li>
-          </ul>
-          <button id="adminNewPurchaseBtn" class="btn primary full" style="margin-top:16px">🔒 Take a Payment &amp; Create New Package</button>
-        </div>
-        <div class="notice" style="margin-top:12px">
-          Payments run through Razorpay Checkout. Paste your <b>Razorpay Key ID</b> into the
-          <code>RAZORPAY_KEY_ID</code> constant near the top of this file's script. Real activation
-          also needs a matching <b>"selfpurchasecontacts"</b> action on your Apps Script backend that
-          (1) verifies the payment signature server-side, (2) creates/updates the field user row using
-          the buyer's email as username and the generated PIN, (3) assigns the next ${PLAN_CONTACTS}
-          unassigned contact rows to that username, and (4) returns <code>{ ok:true, username, pin, assigned }</code>.
-          This keeps real money and real contact data safe from being handed out without a genuine,
-          verified payment.
-        </div>
-        <div class="section-title" style="margin-top:16px"><span>Package Holders</span>
-          <button id="refreshPackagesBtn" class="btn dark small">Refresh</button>
-        </div>
-        <div id="packagesBox" class="mini">Click Refresh to see who has purchased a contact package and how many they've worked through.</div>
-      </div>
     </div>
   `;
 
   bindUsageBadge();
+  bindCornerHome();
   bindCornerLogout();
 
   bindFileUpload();
@@ -1826,10 +1861,11 @@ function renderAdmin(){
     const newUsername = document.getElementById("newUsername").value.trim();
     const newPin = document.getElementById("newPin").value.trim();
     const newFullName = document.getElementById("newFullName").value.trim();
+    const newLocation = document.getElementById("newLocation").value.trim();
     if(!newUsername || !newPin) return showToast("Username and PIN required");
     const weak = weakPinReason(newPin);
     if(weak) return showToast(weak);
-    const r = await api("registeruser", { username:session.username, pin:session.pin, newUsername, newPin, fullName:newFullName, role:"user" });
+    const r = await api("registeruser", { username:session.username, pin:session.pin, newUsername, newPin, fullName:newFullName, location:newLocation, role:"user" });
     if(!r.ok) return showToast(r.error||"Failed");
     showToast("User saved"); loadUserList();
   };
@@ -1838,43 +1874,19 @@ function renderAdmin(){
     const from = Number(document.getElementById("assignFrom").value);
     const to = Number(document.getElementById("assignTo").value);
     const assignTo = document.getElementById("assignUsername").value.trim();
+    const location = document.getElementById("assignLocation").value.trim();
     if(!from || !to || !assignTo) return showToast("Fill all three fields");
     const ids = [];
     for(let i=from;i<=to;i++) ids.push(i);
-    const r = await api("assigncontacts", { username:session.username, pin:session.pin, ids, assignTo });
+    const r = await api("assigncontacts", { username:session.username, pin:session.pin, ids, assignTo, location });
     if(!r.ok) return showToast(r.error||"Failed");
-    showToast(`Assigned ${r.changed} contacts to ${assignTo}`); boot();
+    showToast(`Assigned ${r.changed} contacts to ${assignTo}${location ? " ("+location+")" : ""}`); boot();
   };
 
   document.getElementById("refreshReportBtn").onclick = loadReport;
   document.getElementById("downloadCsvBtn").onclick = downloadCSV;
 
-  document.getElementById("adminNewPurchaseBtn").onclick = () => openPurchaseModal({ onDone: () => boot() });
-  document.getElementById("refreshPackagesBtn").onclick = loadPackages;
-
   loadUserList();
-}
-
-/* Package holders = every field user, with how many contacts they're
-   carrying and how many they've already worked (Status != Pending), so
-   the admin can see at a glance who's finished their pack and is likely
-   to repurchase. */
-async function loadPackages(){
-  const box = document.getElementById("packagesBox");
-  if(!box) return;
-  box.innerHTML = "Loading…";
-  const r = await api("listusers", { username:session.username, pin:session.pin });
-  if(!r.ok){ box.innerHTML = esc(r.error||"Could not load users"); return; }
-  const rows = r.users.filter(u => u.role !== "admin").map(u => {
-    const uname = String(u.username||"").trim().toLowerCase();
-    const mine = contacts.filter(c => String(c.AssignedTo||"").trim().toLowerCase() === uname);
-    const worked = mine.filter(c => c.Status && c.Status !== "Pending").length;
-    const done = mine.length>0 && worked>=mine.length;
-    return `<tr><td>${esc(u.username)}</td><td>${esc(u.fullName)}</td><td>${mine.length}</td><td>${worked}</td>
-      <td>${done ? '<span class="badge" style="background:rgba(37,211,102,.18);color:#9df3c4;border-color:rgba(37,211,102,.3)">Eligible to repurchase</span>' : '<span class="badge">In progress</span>'}</td></tr>`;
-  }).join("");
-  box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Assigned</th><th>Worked</th><th>Status</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="5">No field users yet — packages will appear here once purchased.</td></tr>'}</tbody></table></div>`;
 }
 
 async function loadUserList(){
@@ -1883,14 +1895,14 @@ async function loadUserList(){
   const r = await api("listusers", { username:session.username, pin:session.pin });
   if(!r.ok){ box.innerHTML = `<div class="mini">${esc(r.error||"Could not load users")}</div>`; return; }
   box.innerHTML = r.users.length ? `
-    <div class="table-wrap"><table><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Active</th><th></th></tr></thead>
-    <tbody>${r.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.fullName)}</td><td>${esc(u.role)}</td><td>${esc(u.active)}</td>
+    <div class="table-wrap"><table><thead><tr><th>Username</th><th>Name</th><th>Location</th><th>Role</th><th>Active</th><th></th></tr></thead>
+    <tbody>${r.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.fullName)}</td><td>${esc(u.location||"—")}</td><td>${esc(u.role)}</td><td>${esc(u.active)}</td>
       <td>${u.role==='admin' ? '' : `<button class="btn red tiny" data-del-user="${esc(u.username)}">Delete</button>`}</td></tr>`).join("")}</tbody></table></div>
-  ` : `<div class="mini">No field users registered yet.</div>`;
+  ` : `<div class="mini">No call users registered yet.</div>`;
 
   document.querySelectorAll("[data-del-user]").forEach(b => b.onclick = async () => {
     const username = b.dataset.delUser;
-    if(!confirm(`Delete field user "${username}"? They won't be able to log in anymore.`)) return;
+    if(!confirm(`Delete call user "${username}"? They won't be able to log in anymore.`)) return;
     const r2 = await api("deleteuser", { username:session.username, pin:session.pin, targetUsername:username });
     if(r2.ok){
       showToast(`Deleted ${username}`);
@@ -1966,7 +1978,9 @@ const FIELD_MATCHERS = {
   name:    ["name","fullname","contactname","customername","clientname","personname","leadname"],
   mobile:  ["mobile","mobileno","mobilenumber","phone","phoneno","phonenumber","contact","contactno","contactnumber","primarymobile","number","mob"],
   alt:     ["alt","altmobile","altmobileno","altnumber","alternatemobile","alternatenumber","secondarymobile","mobile2","phone2"],
-  address: ["address","addr","location","city","area"],
+  address: ["address","addr"],
+  location:["location","area","city","zone","region","assignedlocation"],
+  source:  ["source","leadsource","datasource","campaign","channel"],
 };
 
 function mapRow(rawRow){
@@ -1981,6 +1995,8 @@ function mapRow(rawRow){
     mobile: pick(FIELD_MATCHERS.mobile),
     alt: pick(FIELD_MATCHERS.alt),
     address: pick(FIELD_MATCHERS.address),
+    location: pick(FIELD_MATCHERS.location),
+    source: pick(FIELD_MATCHERS.source),
   };
 }
 
@@ -2034,7 +2050,7 @@ function bindFileUpload(){
           Detected headers: ${result.rawHeaders.length ? esc(result.rawHeaders.join(", ")) : "(none — is the first row empty?)"}.
           Rename your columns to something like "Name" and "Mobile" and re-select the file.`;
       }else{
-        const sample = result.rows.slice(0,3).map(r => `${esc(r.name||"—")} · ${esc(r.mobile||"—")}`).join("<br/>");
+        const sample = result.rows.slice(0,3).map(r => `${esc(r.name||"—")} · ${esc(r.mobile||"—")}${r.location ? " · "+esc(r.location) : ""}`).join("<br/>");
         preview.innerHTML = `<span style="color:var(--green)">Read ${result.rows.length} usable row(s) out of ${result.rawCount}.</span><br/>
           Preview: <br/>${sample}${result.rows.length>3 ? "<br/>…" : ""}`;
         replaceBtn.disabled = false; appendBtn.disabled = false;
@@ -2047,8 +2063,17 @@ function bindFileUpload(){
 
   const runUpload = async (mode) => {
     if(!parsed || !parsed.rows.length) return showToast("Choose a valid file first");
+    const batchLocation = document.getElementById("uploadLocation").value.trim();
+    const batchSource = document.getElementById("uploadSource").value.trim();
+    // A row's own Location/Source column (if the file had one) always wins;
+    // the batch fields above only fill in rows that didn't specify one.
+    const rows = parsed.rows.map(r => ({
+      ...r,
+      location: r.location || batchLocation,
+      source: r.source || batchSource,
+    }));
     replaceBtn.disabled = true; appendBtn.disabled = true;
-    const r = await api("uploadcontacts", { username:session.username, pin:session.pin, rows:parsed.rows, mode });
+    const r = await api("uploadcontacts", { username:session.username, pin:session.pin, rows, mode, location:batchLocation, source:batchSource });
     if(!r.ok){ showToast(r.error || "Upload failed"); replaceBtn.disabled = false; appendBtn.disabled = false; return; }
     showToast(`Uploaded. Total now ${r.total}`);
     boot();
@@ -2097,6 +2122,17 @@ setInterval(() => {
     renderLogin();
   }
 }, 30000);
+
+/* ---------------------- Persist Auto Call position on refresh/close ----------------------
+   The Page Visibility / beforeunload pair is the only reliable signal a
+   static page gets before it's torn down by a refresh, tab close, or
+   navigation away. Auto Call state is already saved on every meaningful
+   event above, so this is a final safety-net flush for anything that
+   happened in the last few seconds before unload (e.g. mid "dialing"). */
+window.addEventListener("beforeunload", () => { if(session && session.role === "user") saveAutoCallState("Page refresh/reload"); });
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "hidden" && session && session.role === "user") saveAutoCallState("Page hidden");
+});
 
 boot();
 })();

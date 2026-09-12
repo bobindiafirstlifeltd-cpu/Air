@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<!--
+  DEPLOY NOTES (GitHub Pages / any static host):
+  1. This is a single static file — GitHub Pages, Netlify, Vercel, etc. all work as-is.
+     GitHub Pages: push this file as index.html to a repo → Settings → Pages →
+     Deploy from branch → root, served over HTTPS automatically.
+  2. One placeholder MUST be filled in below (search for it) or features
+     will silently no-op with a toast telling you what's missing:
+       - BACKEND_URL     → your deployed Google Apps Script Web App URL
+  3. Login/loading speed is dominated by Google Apps Script's own response
+     time (each call re-opens the Sheet), not by this front-end. This file
+     already minimizes round trips (parallel requests, local caching of last
+     known data, no CORS-preflight-triggering headers) AND every network
+     call now self-cancels after a timeout (see REQUEST_TIMEOUT_MS below)
+     so a slow Sheet response can never leave a button stuck forever — it
+     falls back to the offline retry queue instead. If it's still slow,
+     the remaining fix is on the Apps Script side: cache reads with
+     CacheService, avoid getDataRange() on the whole sheet for every call,
+     and — biggest win — have the "login" action return the user's
+     contacts in the same response so this app can skip the separate
+     getcontacts round trip.
+  4. No purchase/payment flow is included in this build — every contact
+     is assigned by an admin, or self-picked by a field user from an
+     existing location/area (capped at 200 at a time — see "Self-pick
+     leads by area" below). Nothing here talks to Razorpay or any
+     payment processor.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#08111d" />
+<title>Cloud Call Master — Smart Calling Suite</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#08111d; --panel:#101a33; --panel2:#16213d; --line:rgba(255,255,255,.10);
+  --text:#f3f7ff; --muted:#9fb0d1; --gold:#f5c542; --green:#25d366; --blue:#60a5fa;
+  --red:#ff6476; --orange:#ff9f43; --purple:#b58cff; --shadow:0 16px 40px rgba(0,0,0,.28);
+  --radius:22px; --radius2:16px; --base:16px; --dock-h:74px; --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:radial-gradient(circle at top left, rgba(245,197,66,.16), transparent 28%),
+             radial-gradient(circle at top right, rgba(96,165,250,.10), transparent 24%),
+             linear-gradient(180deg,#060b13 0%, var(--bg) 45%, #060910 100%);
+  color:var(--text); font-size:var(--base); -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+button,input,select,textarea{font:inherit}
+a{color:inherit}
+.hidden{display:none!important}
+.wrap{max-width:1300px;margin:0 auto;padding:14px 12px 32px}
+.glass{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.04));
+  border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(12px);border-radius:var(--radius)}
+.topbar{position:sticky;top:0;z-index:80;display:flex;gap:10px;justify-content:space-between;align-items:center;
+  padding:10px 14px;margin-bottom:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{width:46px;height:46px;border-radius:16px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--gold),#fff0a3);color:#1b1600;font-weight:900;font-size:19px;flex:0 0 auto;letter-spacing:-.5px}
+.title{font-size:18px;font-weight:900;white-space:nowrap}
+.sub{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+.usage-badge{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+  background:rgba(9,14,25,.75);border:1px solid var(--line);font-size:11px;color:var(--muted);
+}
+.usage-badge b{color:var(--gold);font-size:12px}
+.usage-badge .x{cursor:pointer;color:var(--muted);font-weight:900;padding-left:2px}
+.usage-badge .x:hover{color:var(--red)}
+
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:0;cursor:pointer;text-decoration:none;border-radius:14px;padding:12px 14px;font-weight:800;
+  color:#07111e;background:#fff;display:inline-flex;gap:8px;align-items:center;justify-content:center;
+  transition:transform .12s ease,filter .12s ease;min-height:44px}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0);filter:brightness(.96)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.small{padding:9px 12px;min-height:38px;font-size:13px;border-radius:12px}
+.btn.tiny{padding:6px 9px;min-height:30px;font-size:11px;border-radius:10px}
+.btn.primary{background:linear-gradient(135deg,var(--gold),#ffe58f)}
+.btn.green{background:linear-gradient(135deg,#2fe07b,#76f1ab)}
+.btn.blue{background:linear-gradient(135deg,#73b3ff,#a9d5ff)}
+.btn.purple{background:linear-gradient(135deg,#c6a6ff,#e4d3ff)}
+.btn.red{background:linear-gradient(135deg,#ff7b8b,#ff9cab)}
+.btn.dark{background:#16213d;color:var(--text);border:1px solid var(--line)}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn.full{width:100%}
+.icon-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:#0b1324;color:var(--text);
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto}
+.icon-btn:hover{border-color:rgba(245,197,66,.4)}
+
+.grid{display:grid;gap:14px}
+.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start}
+.panel{padding:14px}
+.section{padding:14px;margin-bottom:14px}
+.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#b8c7e8;margin-bottom:10px;
+  display:flex;justify-content:space-between;align-items:center;gap:8px}
+.label{font-size:12px;color:var(--muted);margin:8px 0 6px}
+input[type=text],input[type=password],select,textarea{width:100%;border-radius:12px;
+  border:1px solid rgba(255,255,255,.10);background:#0b1324;color:var(--text);padding:12px;outline:none}
+input[type=text]:focus,input[type=password]:focus,select:focus,textarea:focus{border-color:rgba(245,197,66,.45)}
+textarea{min-height:90px;resize:vertical}
+.notice{font-size:13px;line-height:1.5;padding:11px 13px;background:rgba(96,165,250,.10);
+  border:1px solid rgba(96,165,250,.18);border-radius:14px;color:#deebff}
+.notice.warn{background:rgba(255,159,67,.10);border-color:rgba(255,159,67,.22);color:#ffe6cc}
+.danger{background:rgba(255,100,118,.10);border-color:rgba(255,100,118,.18);color:#ffdfe3}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.stat{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:16px;padding:12px}
+.stat .n{font-size:22px;font-weight:900}
+.stat .l{font-size:11px;color:var(--muted);margin-top:4px}
+
+.progress-track{height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:10px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--gold),#ffe58f);border-radius:999px;transition:width .3s ease}
+
+.call-card{background:linear-gradient(180deg,rgba(245,197,66,.10),rgba(255,255,255,.04));
+  border:1px solid rgba(245,197,66,.20);border-radius:22px;padding:16px;position:relative}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.name{font-size:24px;font-weight:900}
+.phone-row{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.phone{display:inline-flex;gap:8px;align-items:center;font-size:24px;font-weight:900;text-decoration:none;
+  color:#fff8d0;word-break:break-word}
+.copy-chip{border:1px solid var(--line);background:#0b1324;color:var(--muted);border-radius:10px;padding:6px 9px;
+  font-size:11px;cursor:pointer;font-weight:700}
+.copy-chip:hover{color:var(--gold);border-color:rgba(245,197,66,.4)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tab{padding:9px 11px;border-radius:999px;background:#0b1324;color:var(--text);border:1px solid rgba(255,255,255,.10);
+  cursor:pointer;font-size:12px;font-weight:800;
+  transition:background .18s ease,color .18s ease,border-color .18s ease,transform .12s ease}
+.tab:active{transform:scale(.96)}
+.tab.active{background:linear-gradient(135deg,rgba(245,197,66,.96),rgba(255,229,143,.96));color:#1b1600;border-color:transparent}
+
+/* ---- Card entrance (subtle, not distracting) ---- */
+@keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.call-card{animation:cardIn .22s ease}
+
+/* ---- Save status pill: Saving… / Saved / Failed ---- */
+.save-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:6px 11px;
+  border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--muted);
+  transition:background .18s ease,color .18s ease,border-color .18s ease}
+.save-pill.saving{background:rgba(96,165,250,.14);border-color:rgba(96,165,250,.3);color:#cfe3ff}
+.save-pill.saving .dot{width:7px;height:7px;border-radius:999px;background:#60a5fa;animation:pulseDot 1s ease-in-out infinite}
+.save-pill.saved{background:rgba(37,211,102,.16);border-color:rgba(37,211,102,.32);color:#b6f5d0}
+.save-pill.queued{background:rgba(255,159,67,.14);border-color:rgba(255,159,67,.3);color:#ffe6cc}
+.save-pill.error{background:rgba(255,100,118,.14);border-color:rgba(255,100,118,.3);color:#ffd3d9}
+@keyframes pulseDot{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ---- User Base lookup ---- */
+.userbase-box{border:1px solid rgba(245,197,66,.22);background:rgba(245,197,66,.06);border-radius:16px;padding:12px;margin-bottom:14px}
+.userbase-row{display:flex;gap:8px}
+.userbase-row input{flex:1;min-width:0}
+.userbase-nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.data{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.kv{padding:10px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid var(--line);min-width:0}
+.kv .k{font-size:11px;color:var(--muted);margin-bottom:3px}
+.kv .v{font-size:14px;font-weight:700;word-break:break-word}
+.kv.full{grid-column:1/-1}
+.remarks-wrap{position:relative}
+.save-flag{position:absolute;top:-8px;right:8px;font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;
+  background:rgba(255,159,67,.18);color:#ffdcae;border:1px solid rgba(255,159,67,.3)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.actions .btn{min-height:48px}
+.actions-row2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}
+.card-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap}
+
+.list{max-height:calc(100vh - 300px);overflow:auto;padding-right:4px}
+.record{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;padding:10px;border-radius:14px;
+  border:1px solid var(--line);background:rgba(255,255,255,.04);margin-bottom:8px;cursor:pointer;position:relative}
+.record.active{outline:2px solid rgba(245,197,66,.34);background:rgba(245,197,66,.08)}
+.record .nm{font-size:14px;font-weight:900}
+.record .ph{font-size:11px;color:var(--muted);margin-top:3px}
+.record .rmeta{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.record .hide-x{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px}
+.record .hide-x:hover{color:var(--red)}
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:64px;padding:5px 9px;
+  border-radius:999px;background:#0b1324;border:1px solid var(--line);color:var(--muted);font-size:11px;font-weight:800}
+.table-wrap{overflow:auto;border-radius:16px;border:1px solid var(--line)}
+table{width:100%;min-width:820px;border-collapse:collapse;background:rgba(255,255,255,.03)}
+th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:9px 10px;font-size:12px;text-align:left}
+th{position:sticky;top:0;background:#0d1630}
+tr.row-hidden{opacity:.4}
+tr.row-active{background:rgba(245,197,66,.10)}
+
+/* ---- Auto Call ---- */
+.autocall-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:14px 16px;margin-bottom:14px;border:1px solid rgba(245,197,66,.22)}
+.autocall-banner.active{border-color:rgba(37,211,102,.35);background:rgba(37,211,102,.06)}
+.ac-title{font-weight:900;letter-spacing:.02em;font-size:13px}
+.ac-cust{font-weight:800;margin-top:2px}
+.ac-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ac-locked{opacity:.45;pointer-events:none}
+.disposition-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.disposition-grid .disp-btn{min-height:56px;font-size:14px;white-space:normal}
+@media (max-width:420px){ .disposition-grid{grid-template-columns:1fr} }
+.toast{position:fixed;right:14px;bottom:20px;z-index:9999;background:rgba(9,14,25,.96);color:var(--text);
+  border:1px solid var(--line);box-shadow:var(--shadow);border-radius:14px;padding:12px 14px;min-width:220px;
+  max-width:340px;display:none}
+.toast.show{display:block;animation:pop .18s ease}
+@keyframes pop{from{transform:translateY(8px);opacity:.2}to{transform:translateY(0);opacity:1}}
+.login-shell{min-height:100vh;display:grid;place-items:center;padding:18px 12px}
+.login-box{width:100%;max-width:420px;padding:20px}
+.login-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.mini{font-size:12px;color:var(--muted);line-height:1.5}
+.role-toggle{display:flex;gap:8px;margin-bottom:14px}
+.role-toggle button{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0b1324;
+  color:var(--text);cursor:pointer;font-weight:800;font-size:13px}
+.role-toggle button.on{background:linear-gradient(135deg,var(--gold),#ffe58f);color:#1b1600}
+.tag{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800;
+  background:rgba(255,255,255,.08);color:var(--muted)}
+.tag.admin{background:rgba(245,197,66,.18);color:#ffe9a8}
+
+/* ---- Queue drawer (mobile-first hide/show) ---- */
+.queue-toggle{display:none}
+.drawer-overlay{display:none}
+@media (max-width:980px){
+  .layout{grid-template-columns:1fr}
+  .list{max-height:none}
+  .queue-toggle{display:inline-flex}
+  aside.queue-drawer{
+    position:fixed; top:0; right:0; height:100dvh; width:min(340px,86vw); z-index:220;
+    transform:translateX(100%); transition:transform .26s ease; border-radius:0; overflow-y:auto;
+    padding-bottom:calc(20px + var(--safe-b));
+  }
+  aside.queue-drawer.open{transform:translateX(0)}
+  .drawer-overlay{display:block;position:fixed;inset:0;background:rgba(3,6,12,.55);z-index:210;opacity:0;
+    pointer-events:none;transition:opacity .2s ease}
+  .drawer-overlay.open{opacity:1;pointer-events:auto}
+  .drawer-close{display:inline-flex}
+}
+.drawer-close{display:none}
+
+/* ---- Mobile bottom action dock ---- */
+.mobile-dock{display:none}
+@media (max-width:720px){
+  .mobile-dock{
+    display:grid; grid-template-columns:repeat(5,1fr); gap:6px; position:fixed; left:0; right:0; bottom:0; z-index:150;
+    padding:8px 8px calc(8px + var(--safe-b)); background:rgba(9,14,25,.94); border-top:1px solid var(--line);
+    backdrop-filter:blur(14px);
+  }
+  .mobile-dock button, .mobile-dock a{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:0;
+    border-radius:12px; padding:8px 2px; font-size:10px; font-weight:800; text-decoration:none; color:var(--text);
+    background:rgba(255,255,255,.06); min-height:56px;
+  }
+  .mobile-dock .ic{font-size:17px}
+  .mobile-dock .dock-call{background:linear-gradient(135deg,#2fe07b,#76f1ab);color:#07220f}
+  .mobile-dock .dock-save{background:linear-gradient(135deg,var(--gold),#ffe58f);color:#1b1600}
+  .wrap{padding-bottom:calc(var(--dock-h) + 24px)}
+  .actions,.actions-row2{display:none}
+}
+
+@media (max-width:640px){
+  .name{font-size:20px} .phone{font-size:20px}
+  .data{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  table{min-width:680px}
+  .title{font-size:16px}
+}
+
+/* ---- Back button ---- */
+.back-btn{display:inline-flex;align-items:center;gap:6px;background:#0b1324;color:var(--text);
+  border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-weight:800;font-size:13px;cursor:pointer}
+.back-btn:hover{border-color:rgba(245,197,66,.4)}
+
+/* ---- Completion / self-pick-more banner ---- */
+.repurchase-banner{background:linear-gradient(160deg,rgba(37,211,102,.16),rgba(96,165,250,.06));
+  border:1px solid rgba(37,211,102,.3);border-radius:20px;padding:16px;margin-bottom:14px;
+  display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.repurchase-banner .r-text b{display:block;font-size:15px}
+.repurchase-banner .r-text span{font-size:12px;color:var(--muted)}
+
+/* ---- Modal ---- */
+.modal-overlay{position:fixed;inset:0;background:rgba(3,6,12,.72);z-index:400;display:flex;
+  align-items:center;justify-content:center;padding:16px}
+.modal-box{width:100%;max-width:440px;max-height:90vh;overflow:auto;padding:20px;position:relative}
+.modal-close{position:absolute;top:12px;right:12px}
+
+/* ---- Bulk WhatsApp ---- */
+.bulkwa-current{background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.25);border-radius:16px;
+  padding:14px;margin-top:10px}
+.bulkwa-current .bw-name{font-size:17px;font-weight:900}
+.bulkwa-current .bw-phone{font-size:13px;color:var(--muted);margin-top:2px}
+.bulkwa-list{max-height:180px;overflow:auto;margin-top:10px;border:1px solid var(--line);border-radius:12px}
+.bulkwa-list .bwrow{display:flex;justify-content:space-between;padding:7px 10px;font-size:12px;border-bottom:1px solid var(--line)}
+.bulkwa-list .bwrow:last-child{border-bottom:0}
+.bulkwa-list .bwrow.sent{opacity:.4;text-decoration:line-through}
+
+/* ---- Corner logout ---- */
+.corner-logout{position:fixed;top:max(14px, env(safe-area-inset-top));right:max(14px, env(safe-area-inset-right));
+  z-index:500;display:flex;align-items:center;gap:6px;background:#0b1324;color:var(--text);
+  border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:800;font-size:12px;
+  cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.corner-logout:hover{border-color:rgba(255,100,118,.5);color:#ffdfe3}
+@media (max-width:640px){ .corner-logout{padding:7px 11px;font-size:11px} }
+
+/* ---- Report modal ---- */
+.report-stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.report-stat-grid .rs{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
+.report-stat-grid .rs .n{font-size:20px;font-weight:900;color:var(--gold)}
+.report-stat-grid .rs .l{font-size:11px;color:var(--muted);margin-top:2px}
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<div id="app"></div>
+
+<script>
+(() => {
+/* =====================================================================
+   1) PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BELOW (see setup guide)
+   Backend/server logic is untouched — only client action names are used.
+   ===================================================================== */
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbzE8VZea3c0aEKiFkOXAkvBCZf8fW-tTd4JTT1qyLap2Tyopj4fIUSkMFYpPzaAmbB_pw/exec";
+
+const LS_SESSION = "ccm_session_v1";
+const LS_HIDDEN_PREFIX = "ccm_hidden_"; // + username -> array of contact IDs hidden from that user's queue (admin fallback only)
+const LS_DRAFT_PREFIX = "ccm_draft_";   // + username -> {id: remarksText} unsent remarks drafts
+const LS_QUEUE_RETRY = "ccm_retry_queue_v1"; // failed updates waiting to sync
+const LS_PROFILE_PREFIX = "ccm_sharelink_"; // + key + username -> saved shareable link
+const LS_CACHE_CONTACTS_PREFIX = "ccm_cache_contacts_"; // + username -> {contacts, ts} last-known data for instant reload
+const LS_LASTPOS_PREFIX = "ccm_lastpos_"; // + username -> ID of the contact the user was last viewing/calling
+const LS_AUTOCALL_STATE_PREFIX = "ccm_autocall_state_"; // + username -> persisted Auto Call resume state (see saveAutoCallState)
+
+/* ---------------------- Resume where you left off ----------------------
+   Whenever the active contact card changes (opened, Next/Prev, tapped in
+   the list), we remember its ID. Next time this user logs in — even on a
+   different day or after closing the tab — the queue opens back on that
+   same contact instead of resetting to the top of the list. */
+function lastPosKey(){ return LS_LASTPOS_PREFIX + (session ? session.username : ""); }
+function saveLastPosition(id){ if(id!=null) localStorage.setItem(lastPosKey(), String(id)); }
+function getLastPosition(){ return localStorage.getItem(lastPosKey()); }
+
+/* ---------------------- Corner logout (fixed, same spot on every screen) ---------------------- */
+function cornerLogoutHtml(){
+  return `<button id="cornerLogoutBtn" class="corner-logout" title="Log out">⏻ Logout</button>`;
+}
+function bindCornerLogout(){
+  const b = document.getElementById("cornerLogoutBtn");
+  if(b) b.onclick = () => {
+    // If Auto Call is mid-run, stop it cleanly first so the persisted
+    // state reflects "not active" rather than a stale in-flight call —
+    // this does NOT clear the saved resume position, only Reset does that.
+    if(autoCall.active) stopAutoCall();
+    // Logging out is a signal the user wants this device clean — clear the
+    // cached customer data (names/numbers) and drafts for this account so
+    // they don't linger in localStorage on a shared/lost device. The Auto
+    // Call resume position is deliberately NOT cleared here — it must
+    // survive logout so the user resumes from the right contact next time.
+    if(session){
+      try{
+        localStorage.removeItem(contactsCacheKey());
+        localStorage.removeItem(lastPosKey());
+        localStorage.removeItem(draftKey());
+      }catch(e){}
+    }
+    session=null; saveSession(); renderLogin();
+  };
+}
+
+/* ---------------------- "My Report" — user-facing report fetch ----------------------
+   Field users previously had no way to see their own numbers besides
+   scrolling the queue. This gives them the same right admins have: a
+   dedicated button that pulls their status breakdown on demand. It's
+   computed from the contacts already loaded for them (their own data
+   only — never anyone else's), so it opens instantly with no extra
+   network round trip. */
+function openMyReportModal(){
+  const mine = assignedContacts();
+  const byStatus = {};
+  mine.forEach(c => { const s=c.Status||"Pending"; byStatus[s]=(byStatus[s]||0)+1; });
+  const done = mine.length - (byStatus["Pending"]||0);
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="glass modal-box">
+      <button class="icon-btn modal-close" id="myReportClose">✕</button>
+      <div class="section-title"><span>📊 My Report</span></div>
+      <div class="mini">A live snapshot of everything assigned to you — ${esc(session.fullName)}.</div>
+      <div class="report-stat-grid">
+        <div class="rs"><div class="n">${mine.length}</div><div class="l">Assigned</div></div>
+        <div class="rs"><div class="n">${done}</div><div class="l">Worked</div></div>
+        <div class="rs"><div class="n">${byStatus["Pending"]||0}</div><div class="l">Pending</div></div>
+      </div>
+      <div class="section-title" style="margin-top:16px"><span>By status</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Status</th><th>Count</th></tr></thead>
+        <tbody>${STATUS_OPTIONS.map(s=>`<tr><td>${esc(s)}</td><td>${byStatus[s]||0}</td></tr>`).join("")}</tbody></table></div>
+      <button id="myReportDownloadBtn" class="btn primary full" style="margin-top:16px">⬇ Download Full Report (CSV)</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.onclick = e => { if(e.target===overlay) close(); };
+  document.getElementById("myReportClose").onclick = close;
+  document.getElementById("myReportDownloadBtn").onclick = downloadMyReportCSV;
+}
+const STATUS_OPTIONS = ["Pending","Interested","Not Interested","Callback","Busy","Wrong Number","No Answer","Dropped","Follow Up","Do Not Call","Closed"];
+
+/* =====================================================================
+   AUTO CALL FEATURE
+   Steps a field user through their eligible queue one lead at a time:
+   dial (existing tel: mechanism) -> user returns from the phone app ->
+   log a result -> auto-advance to the next lead. Reuses telNumber(),
+   saveRecord(), STATUS_OPTIONS and the existing modal-overlay pattern —
+   no parallel data path, no new backend calls.
+
+   RESUME STATE: persisted to localStorage per logged-in username (same
+   pattern as LS_LASTPOS_PREFIX/LS_DRAFT_PREFIX elsewhere in this file),
+   keyed by contact ID rather than array index — indexes shift whenever
+   filters/search/assignment change, IDs don't. Saved immediately on every
+   meaningful transition (call started, call ended, disposition saved,
+   next contact loaded, stopped) so a refresh/logout/crash never loses
+   more than the single call in flight. Never auto-resumed by itself on
+   load — the user always presses Start Auto Call, which then continues
+   from this saved position (see startAutoCall below).
+
+   HONEST LIMITATION: a browser cannot detect when a phone call actually
+   connects or ends — that happens entirely inside the native dialer,
+   outside the page. The best available signal is the Page Visibility
+   API: when the tab becomes visible again after being backgrounded (the
+   user leaving for/returning from the dialer), we treat that as "the
+   call is over" and show the result popup. This is reliable on most
+   Android browsers but not guaranteed on every device/WebView, so a
+   manual "I'm back — log this call" button is always shown as a
+   fallback while waiting.
+   ===================================================================== */
+const AUTO_CALL_TERMINAL_STATUSES = ["Not Interested","Do Not Call","Closed","Wrong Number"];
+const AUTO_CALL_MIN_AWAY_MS = 1200; // ignore instant visibility flips (accidental tab switches)
+
+let autoCall = {
+  active: false,        // Stop sets this false immediately, from any phase
+  runId: 0,               // bumped on every Start; async callbacks check it to avoid acting on a stopped/older run
+  queue: [],                // snapshot of eligible leads for this run, positioned by ID — see startAutoCall
+  pos: 0,                     // index of the current/next lead within queue
+  processed: 0,                 // calls completed so far this run (display only, not the resume mechanism)
+  phase: "idle",                  // idle | dialing | awaiting-return | disposition | followup | saving | save-error | completed
+  dialedAt: 0,
+  lastProcessedId: null,            // ID of the last contact successfully saved — the resume mechanism's source of truth
+  lastAction: null,                   // disposition of the last processed contact, for the persisted record
+};
+
+function autoCallStateKey(){ return LS_AUTOCALL_STATE_PREFIX + (session ? session.username : ""); }
+
+/* Called at every meaningful transition (started, contact selected, call
+   initiated, call disconnected, disposition saved, follow-up saved,
+   contact completed, next loaded, stopped). Cheap synchronous write,
+   isolated per username so User A's position never touches User B's. */
+function saveAutoCallState(){
+  if(!session) return;
+  const nextLead = autoCall.queue[autoCall.pos] || null;
+  const state = {
+    userId: session.username,
+    leadId: nextLead ? nextLead.ID : null,   // the contact Auto Call will resume on
+    lastProcessedId: autoCall.lastProcessedId,
+    processed: autoCall.processed,
+    active: autoCall.active,
+    phase: autoCall.phase,
+    lastAction: autoCall.lastAction,
+    updatedAt: Date.now(),
+  };
+  try{ localStorage.setItem(autoCallStateKey(), JSON.stringify(state)); }catch(e){}
+}
+function loadAutoCallState(){
+  try{ return JSON.parse(localStorage.getItem(autoCallStateKey()) || "null"); }catch(e){ return null; }
+}
+/* Only clears the saved resume position — never called on logout, only
+   from the explicit "Reset Auto Call Position" button after confirmation. */
+function clearAutoCallState(){ try{ localStorage.removeItem(autoCallStateKey()); }catch(e){} }
+
+function autoCallIsEligible(c){ return !AUTO_CALL_TERMINAL_STATUSES.includes(c.Status || "Pending"); }
+
+function startAutoCall(){
+  if(autoCall.active) return; // guards double-tap / double-bind
+
+  const list = filteredContacts();
+  const displayedRec = list[ui.currentIndex] || null;
+  const haveLiveQueue = autoCall.queue.length > 0 && autoCall.pos < autoCall.queue.length;
+  const liveCurrentId = haveLiveQueue ? String(autoCall.queue[autoCall.pos].ID) : null;
+  const jumpedAway = !!(displayedRec && haveLiveQueue && String(displayedRec.ID) !== liveCurrentId);
+
+  if(!haveLiveQueue || jumpedAway){
+    // Fresh run, or the user deliberately jumped somewhere else since the
+    // last run stopped. Rebuild the eligible queue and pick the starting
+    // position with this priority: the currently displayed/jumped contact
+    // first, then the previously saved resume position, then the beginning.
+    const eligible = visibleContacts().filter(autoCallIsEligible);
+    if(!eligible.length){
+      showToast("No eligible leads to call — everyone assigned to you is Not Interested, Do Not Call, Closed, or has an invalid number.");
+      return;
+    }
+    autoCall.queue = eligible;
+    autoCall.processed = 0;
+
+    let startPos = displayedRec ? eligible.findIndex(c => String(c.ID) === String(displayedRec.ID)) : -1;
+    if(startPos < 0){
+      const saved = loadAutoCallState();
+      const resumeId = saved && saved.leadId != null ? saved.leadId : null;
+      if(resumeId != null) startPos = eligible.findIndex(c => String(c.ID) === String(resumeId));
+    }
+    autoCall.pos = startPos >= 0 ? startPos : 0;
+
+    if(jumpedAway) showToast(`Starting Auto Call from ${displayedRec.Name || ("#"+displayedRec.ID)} — the contact you jumped to.`);
+    else if(startPos > 0) showToast("Resuming Auto Call from where you left off.");
+  }
+  // else: an in-memory run was Stopped mid-way and nothing was jumped since — continue that exact queue/position untouched.
+
+  autoCall.runId += 1;
+  const runId = autoCall.runId;
+  autoCall.active = true;
+  autoCall.phase = "idle";
+  ui.statusFilter = "All";
+  ui.search = "";
+  ui.drawerOpen = false;
+  saveAutoCallState();
+  renderUser();
+  autoCallDialCurrent(runId);
+}
+
+/* Explicit, confirmed-only reset — clears the saved resume position so the
+   next Start begins from the first eligible contact instead of resuming. */
+function resetAutoCallPosition(){
+  if(autoCall.active){ showToast("Stop Auto Call before resetting its position."); return; }
+  const ok = confirm("Reset Auto Call Position?\n\nThis clears your saved Auto Call progress. Next time you press Start Auto Call, it will begin from the first eligible contact instead of resuming where you left off.");
+  if(!ok) return;
+  clearAutoCallState();
+  autoCall.queue = [];
+  autoCall.pos = 0;
+  autoCall.processed = 0;
+  autoCall.lastProcessedId = null;
+  autoCall.lastAction = null;
+  goFirstRecord();
+  showToast("Auto Call position reset — it will start from the beginning next time.");
+}
+
+function stopAutoCall(){
+  if(!autoCall.active) return;
+  autoCall.active = false;
+  autoCall.runId += 1; // invalidate any in-flight visibility/timer callbacks from this run
+  if(autoCall.phase === "dialing" || autoCall.phase === "awaiting-return") autoCall.phase = "idle";
+  // Note: if a disposition/follow-up popup is already open, we deliberately
+  // leave it open — the user can still finish logging that call (rule:
+  // "allow the currently active call to finish where technically
+  // possible"). Its own save handler checks autoCall.active afterwards and
+  // will not auto-dial the next number since it's now false.
+  saveAutoCallState();
+  showToast("Auto Call stopped. Your place in the queue is saved — press Start Auto Call to continue.");
+  renderUser();
+}
+
+function autoCallDialCurrent(runId){
+  if(runId !== autoCall.runId || !autoCall.active) return;
+  if(autoCall.pos >= autoCall.queue.length){ autoCallFinish(runId); return; }
+  const rec = autoCall.queue[autoCall.pos];
+  if(!autoCallIsEligible(rec)){ autoCall.pos += 1; autoCallDialCurrent(runId); return; } // status changed since queue was built — skip
+  const idx = filteredContacts().findIndex(c => String(c.ID) === String(rec.ID));
+  if(idx >= 0) ui.currentIndex = idx;
+
+  const num = telNumber(rec.Mobile);
+  if(!num || num === "+"){
+    showToast(`Skipping ${rec.Name || rec.ID} — no valid mobile number.`);
+    autoCallRecordDisposition(rec, "No Answer", rec.Remarks || "", runId);
+    return;
+  }
+
+  autoCall.phase = "dialing";
+  saveAutoCallState(); // "call initiated"
+  renderUser();
+  autoCall.dialedAt = Date.now();
+  autoCall.phase = "awaiting-return";
+  window.location.href = "tel:" + num; // same mechanism as the existing manual Call button/link
+  renderUser();
+}
+
+/* Fires when the user comes back to the tab (Page Visibility API) or taps
+   the manual fallback button — either way, this is our best signal that
+   the call is over and it's time to log a result. */
+function handleAutoCallReturn(manual){
+  if(!autoCall.active || autoCall.phase !== "awaiting-return") return;
+  if(!manual && (Date.now() - (autoCall.dialedAt||0)) < AUTO_CALL_MIN_AWAY_MS) return;
+  const runId = autoCall.runId;
+  const rec = autoCall.queue[autoCall.pos];
+  if(!rec) return;
+  autoCall.phase = "disposition";
+  saveAutoCallState(); // "call disconnected"
+  renderUser();
+  openAutoCallDispositionModal(rec, runId);
+}
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible") handleAutoCallReturn(false);
+  else saveAutoCallState(); // belt-and-braces: also save the instant the tab backgrounds (e.g. right before the dialer takes over)
+});
+window.addEventListener("pagehide", saveAutoCallState); // safety net for abrupt refresh/close — normal transitions already save immediately
+
+function closeAutoCallModals(){
+  ["autoCallDispositionOverlay","autoCallFollowUpOverlay","autoCallSaveErrorOverlay"].forEach(id => {
+    const el = document.getElementById(id); if(el) el.remove();
+  });
+}
+
+function openAutoCallDispositionModal(rec, runId){
+  closeAutoCallModals();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "autoCallDispositionOverlay";
+  overlay.innerHTML = `
+    <div class="glass modal-box">
+      <div class="section-title"><span>📞 Call Result</span></div>
+      <div class="mini" style="margin-bottom:12px">
+        Customer: <b>${esc(rec.Name || "Unnamed")}</b><br/>
+        Mobile: <b>${esc(rec.Mobile || "—")}</b><br/>
+        Queue: <b>${autoCall.pos+1} / ${autoCall.queue.length}</b>
+      </div>
+      <div class="disposition-grid">
+        <button class="btn green disp-btn" data-disp="Interested">✅ Interested</button>
+        <button class="btn dark disp-btn" data-disp="Not Interested">✖ Not Interested</button>
+        <button class="btn primary disp-btn" data-disp="Follow Up">📅 Follow Up</button>
+        <button class="btn red disp-btn" data-disp="Do Not Call">🚫 Don't Call</button>
+        <button class="btn ghost disp-btn" data-disp="No Answer" style="grid-column:1/-1">📵 Call Not Connected</button>
+      </div>
+      <button class="btn ghost full" id="autoCallStopFromDisposition" style="margin-top:12px">⏹ Stop Auto Call</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll("[data-disp]").forEach(b => b.onclick = () => {
+    const status = b.dataset.disp;
+    overlay.remove();
+    if(status === "Follow Up"){ openFollowUpModal(rec, runId); return; }
+    autoCallRecordDisposition(rec, status, rec.Remarks || "", runId);
+  });
+  document.getElementById("autoCallStopFromDisposition").onclick = () => { overlay.remove(); stopAutoCall(); };
+}
+
+function openFollowUpModal(rec, runId){
+  closeAutoCallModals();
+  const now = new Date();
+  const minDate = now.toISOString().slice(0,10);
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "autoCallFollowUpOverlay";
+  overlay.innerHTML = `
+    <div class="glass modal-box">
+      <div class="section-title"><span>📅 Schedule Follow-Up</span></div>
+      <div class="mini" style="margin-bottom:10px">${esc(rec.Name || "Unnamed")} · ${esc(rec.Mobile || "—")}</div>
+      <div class="label">Follow-up Date</div>
+      <input type="date" id="fuDate" min="${minDate}" value="${minDate}"/>
+      <div class="label">Follow-up Time</div>
+      <input type="time" id="fuTime" value="10:00"/>
+      <div class="label">Remark (optional)</div>
+      <textarea id="fuRemark" placeholder="e.g. Client asked to call after salary date"></textarea>
+      <div class="mini" style="margin-top:6px">Saved into this contact's Remarks — there's no separate follow-up field in the sheet, so it's kept as plain text there.</div>
+      <div class="toolbar" style="margin-top:14px">
+        <button class="btn primary" id="fuSaveBtn">💾 Save Follow Up</button>
+        <button class="btn ghost" id="fuCancelBtn">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById("fuCancelBtn").onclick = () => { overlay.remove(); openAutoCallDispositionModal(rec, runId); };
+  document.getElementById("fuSaveBtn").onclick = () => {
+    const d = document.getElementById("fuDate").value;
+    const t = document.getElementById("fuTime").value;
+    if(!d || !t) return showToast("Pick a follow-up date and time");
+    const dateLabel = new Date(d+"T"+t).toLocaleString("en-IN", { day:"numeric", month:"short", year:"numeric", hour:"numeric", minute:"2-digit", hour12:true });
+    const remark = document.getElementById("fuRemark").value.trim();
+    const composed = `Follow-up: ${dateLabel}${remark ? " — " + remark : ""}`;
+    overlay.remove();
+    autoCallRecordDisposition(rec, "Follow Up", composed, runId);
+  };
+}
+
+/* Saves via the existing saveRecord() — same duplicate-submission lock,
+   same offline retry queue, same Saving/Saved/Failed pill as manual saves.
+   Only advances the queue after a confirmed successful save, using the
+   contact's ID (not its array index) so nothing can be double-counted if
+   the surrounding list is re-filtered mid-flight. */
+async function autoCallRecordDisposition(rec, status, remarks, runId){
+  if(runId !== autoCall.runId) return; // stale callback from a stopped/older run
+  autoCall.phase = "saving";
+  autoCall.lastAction = status;
+  saveAutoCallState(); // "disposition selected"
+  renderUser();
+  await saveRecord(rec, status, remarks);
+  if(runId !== autoCall.runId) return; // stopped/restarted while the save was in flight
+
+  if(ui.saveState && String(ui.saveState.id) === String(rec.ID) && ui.saveState.phase === "error"){
+    autoCall.phase = "save-error";
+    saveAutoCallState();
+    renderUser();
+    openAutoCallSaveErrorModal(rec, status, remarks, runId);
+    return;
+  }
+
+  // Confirmed saved — this contact is done. Advance by ID, not index.
+  autoCall.lastProcessedId = rec.ID;
+  autoCall.processed += 1;
+  autoCall.pos += 1;
+  const nextRec = autoCall.queue[autoCall.pos] || null;
+  if(nextRec){
+    const nextIdx = filteredContacts().findIndex(c => String(c.ID) === String(nextRec.ID));
+    if(nextIdx >= 0) ui.currentIndex = nextIdx; // keep the displayed contact in sync with the resume position
+  }
+  saveAutoCallState(); // "contact completed" + "next contact loaded"
+  if(!autoCall.active){ autoCall.phase = "idle"; renderUser(); return; } // Stop was pressed during the save — honor it, don't dial next
+  autoCallDialCurrent(runId);
+}
+
+function openAutoCallSaveErrorModal(rec, status, remarks, runId){
+  closeAutoCallModals();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "autoCallSaveErrorOverlay";
+  overlay.innerHTML = `
+    <div class="glass modal-box">
+      <div class="section-title"><span>⚠ Unable to Save</span></div>
+      <div class="mini" style="margin-bottom:14px">Could not save the result for <b>${esc(rec.Name || rec.ID)}</b> yet — nothing has been lost. Retry, or stop and it'll still be waiting for you.</div>
+      <button class="btn primary full" id="autoCallRetrySave">↻ Retry Save</button>
+      <button class="btn ghost full" id="autoCallStopFromError" style="margin-top:10px">⏹ Stop Auto Call</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById("autoCallRetrySave").onclick = () => { overlay.remove(); autoCallRecordDisposition(rec, status, remarks, runId); };
+  document.getElementById("autoCallStopFromError").onclick = () => { overlay.remove(); stopAutoCall(); };
+}
+
+function autoCallFinish(runId){
+  if(runId !== autoCall.runId) return;
+  autoCall.active = false;
+  autoCall.phase = "completed";
+  saveAutoCallState();
+  renderUser();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="glass modal-box" style="text-align:center">
+      <div style="font-size:40px;margin-bottom:8px">🎉</div>
+      <div class="section-title" style="justify-content:center"><span>Auto Call Completed</span></div>
+      <div class="mini" style="margin:10px 0 16px">All eligible assigned contacts have been processed (${autoCall.processed} call${autoCall.processed===1?"":"s"} this run).</div>
+      <button class="btn primary full" id="autoCallDoneClose">Done</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => { overlay.remove(); autoCall.phase = "idle"; renderUser(); };
+  document.getElementById("autoCallDoneClose").onclick = close;
+  overlay.onclick = e => { if(e.target === overlay) close(); };
+}
+
+function renderAutoCallBanner(){
+  if(!autoCall.active){
+    const saved = loadAutoCallState();
+    const resumeRec = saved && saved.leadId != null ? autoCall.queue.find(c=>String(c.ID)===String(saved.leadId)) : null;
+    const hasResumeInfo = saved && (saved.leadId != null || saved.lastProcessedId != null);
+    return `
+    <div class="glass autocall-banner">
+      <div class="ac-left">
+        <div class="ac-title">🚀 AUTO CALL</div>
+        <div class="mini">Steps through your eligible leads one at a time — dial, log the result, repeat. You still tap once per call (phones require that); everything after is automatic.</div>
+        ${hasResumeInfo ? `<div class="mini" style="margin-top:4px">Will resume from ${resumeRec ? `<b>${esc(resumeRec.Name||("#"+resumeRec.ID))}</b>` : "your last saved position"}${saved.processed?` · ${saved.processed} processed last run`:""}.</div>` : ""}
+      </div>
+      <div class="ac-actions">
+        <button id="startAutoCallBtn" class="btn primary">▶ START AUTO CALL</button>
+        ${hasResumeInfo ? `<button id="resetAutoCallBtn" class="btn ghost small">↺ Reset Position</button>` : ""}
+      </div>
+    </div>`;
+  }
+  const rec = autoCall.queue[autoCall.pos] || null;
+  const phaseLabel = {
+    dialing: "Calling…",
+    "awaiting-return": "Waiting for you to return from the dialer…",
+    disposition: "Waiting for you to log the result…",
+    saving: "Saving result…",
+    "save-error": "⚠ Could not save — retry needed",
+  }[autoCall.phase] || "Ready…";
+  return `
+  <div class="glass autocall-banner active">
+    <div class="ac-left">
+      <div class="ac-title">🚀 AUTO CALL ACTIVE</div>
+      ${rec ? `<div class="ac-cust">${esc(rec.Name || "Unnamed")} · ${esc(rec.Mobile || "—")}</div>` : ""}
+      <div class="mini">Queue: ${Math.min(autoCall.pos+1, autoCall.queue.length)} / ${autoCall.queue.length} &nbsp;·&nbsp; Status: ${esc(phaseLabel)}</div>
+    </div>
+    <div class="ac-actions">
+      ${autoCall.phase === "awaiting-return" ? `<button id="autoCallManualReturnBtn" class="btn dark small">I'm back — log this call</button>` : ""}
+      <button id="stopAutoCallBtn" class="btn red small">⏹ STOP AUTO CALL</button>
+    </div>
+  </div>`;
+}
+
+/* =====================================================================
+   SELF-PICK LEADS BY AREA (replaces the old paid purchase flow)
+   No money changes hands anywhere in this file. A field user may pull up
+   to SELFPICK_MAX_LEADS unassigned contacts for themselves, but only from
+   a location/area that already exists in the sheet — they can never
+   invent a new area or see how many total unassigned contacts exist
+   elsewhere. Anything outside that (a brand-new area, more than the cap,
+   or the location list itself) still has to be set up by the admin.
+   Needs two small Apps Script actions — "getunassignedlocations" and
+   "selfassignbylocation" — documented right where they're called further
+   down. Until those exist on the backend, the UI explains exactly what's
+   missing instead of pretending it worked.
+   ===================================================================== */
+const SELFPICK_MAX_LEADS = 200;
+
+/* ---------------------- Login attempt throttling ----------------------
+   This is a DEVICE-side speed bump only — it slows down someone guessing
+   PINs through this app's own login screen. It cannot stop someone who
+   calls BACKEND_URL directly (curl/script), and clearing browser storage
+   resets it. Real brute-force protection (rate limiting per IP/username,
+   PIN hashing, lockouts that survive across devices) has to live in the
+   Apps Script backend — that code isn't part of this file, so it can't
+   be added here. This just raises the bar for casual attempts via the UI. */
+const LS_LOGIN_ATTEMPTS = "ccm_login_attempts_v1"; // { [username]: { count, lockUntil } }
+function getLoginAttempts(){ try{ return JSON.parse(localStorage.getItem(LS_LOGIN_ATTEMPTS) || "{}"); }catch(e){ return {}; } }
+function setLoginAttempts(obj){ try{ localStorage.setItem(LS_LOGIN_ATTEMPTS, JSON.stringify(obj)); }catch(e){} }
+function loginLockStatus(username){
+  const all = getLoginAttempts();
+  const rec = all[String(username||"").trim().toLowerCase()];
+  if(!rec || !rec.lockUntil || rec.lockUntil <= Date.now()) return { locked:false };
+  return { locked:true, msLeft: rec.lockUntil - Date.now() };
+}
+function recordFailedLogin(username){
+  const all = getLoginAttempts();
+  const key = String(username||"").trim().toLowerCase();
+  const rec = all[key] || { count:0, lockUntil:0 };
+  rec.count += 1;
+  // Progressive lockout: 5 fails -> 30s, 8 fails -> 2min, 12+ fails -> 10min.
+  if(rec.count >= 12) rec.lockUntil = Date.now() + 10*60*1000;
+  else if(rec.count >= 8) rec.lockUntil = Date.now() + 2*60*1000;
+  else if(rec.count >= 5) rec.lockUntil = Date.now() + 30*1000;
+  all[key] = rec;
+  setLoginAttempts(all);
+}
+function clearLoginAttempts(username){
+  const all = getLoginAttempts();
+  delete all[String(username||"").trim().toLowerCase()];
+  setLoginAttempts(all);
+}
+
+/* ---------------------- Weak PIN detection ----------------------
+   Advisory only — blocks the most guessable PINs (all-same-digit,
+   simple runs) from being created through this UI. A determined
+   attacker calling the backend directly isn't affected by this either;
+   it just stops an admin from accidentally handing out "111111" or
+   "123456" to a field user. */
+function weakPinReason(pin){
+  const p = String(pin||"");
+  if(p.length < 6) return "Use at least 6 digits — shorter PINs are much easier to guess.";
+  if(/^(\d)\1+$/.test(p)) return "Avoid a repeated digit like 111111 — it's one of the first things guessed.";
+  if("0123456789".includes(p) || "9876543210".includes(p)) return "Avoid a simple run like 123456 — it's one of the first things guessed.";
+  return null;
+}
+
+const app = document.getElementById("app");
+const toast = document.getElementById("toast");
+
+let session = JSON.parse(localStorage.getItem(LS_SESSION) || "null");
+let contacts = [];
+let usageCount = null;
+let usageBadgeDismissed = sessionStorage.getItem("ccm_usage_dismissed") === "1";
+let ui = { currentIndex:0, statusFilter:"All", search:"", drawerOpen:false, showLinksPanel:false, showBulkWaPanel:false, showQueueTable:false, bulkWaTemplate:"Hello {name}, this is regarding your policy enquiry. Let us know if you have any questions!", dirty:false, userBaseValue:"", saveState:null };
+let savingInFlight = false; // blocks duplicate Save submissions while a save is in flight
+
+/* ---------------------- Bulk WhatsApp: sent-tracking (per user, per device) ----------------------
+   WhatsApp has no public API for unattended bulk sending — automating the
+   final "Send" tap would violate WhatsApp's terms and risk the number
+   being banned. This instead gives a fast one-click-per-contact flow: open
+   WhatsApp pre-filled → user taps Send in WhatsApp → click "Next" here.
+   Each contact is remembered as sent so nobody gets messaged twice. */
+const LS_BULKWA_PREFIX = "ccm_bulkwa_sent_";
+function bulkWaKey(){ return LS_BULKWA_PREFIX + (session ? session.username : "guest"); }
+function getBulkWaSent(){ return JSON.parse(localStorage.getItem(bulkWaKey()) || "[]").map(String); }
+function markBulkWaSent(id){ const s = getBulkWaSent(); if(!s.includes(String(id))){ s.push(String(id)); localStorage.setItem(bulkWaKey(), JSON.stringify(s)); } }
+function resetBulkWaSent(){ localStorage.removeItem(bulkWaKey()); }
+function bulkWaQueue(){
+  const sent = getBulkWaSent();
+  return assignedContacts().filter(c => cleanNumber(c.Mobile).length >= 12 && !sent.includes(String(c.ID)));
+}
+
+/* ---------------------- small helpers ---------------------- */
+function showToast(msg, ms=2600){
+  toast.textContent = msg;
+  toast.classList.add("show");
+  clearTimeout(showToast.t);
+  showToast.t = setTimeout(()=>toast.classList.remove("show"), ms);
+}
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function saveSession(){ localStorage.setItem(LS_SESSION, JSON.stringify(session)); }
+
+/* Clean a phone number for tel:/wa.me/sms: links.
+   Fixes the old bug where numbers already carrying a 91/+91 prefix got a
+   second 91 stuck on the front for WhatsApp, breaking the link. */
+function cleanNumber(raw){
+  let d = String(raw||"").replace(/\D/g,"");
+  if(d.length>10 && d.startsWith("0")) d = d.replace(/^0+/,"");
+  if(d.length===10) d = "91"+d;
+  else if(d.length===11 && d.startsWith("0")) d = "91"+d.slice(1);
+  return d; // e.g. 91XXXXXXXXXX — used for wa.me and sms: links (no plus sign)
+}
+// tel: links need a leading "+" for the country code to dial reliably on most
+// phones/carriers — wa.me/sms: must NOT have it, which is why this is separate.
+function telNumber(raw){ return "+" + cleanNumber(raw); }
+function copyToClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>showToast("Number copied")).catch(()=>showToast("Could not copy"));
+  }else{
+    const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t);
+    t.select(); try{ document.execCommand("copy"); showToast("Number copied"); }catch(e){ showToast("Could not copy"); }
+    t.remove();
+  }
+}
+
+/* ---------------------- hidden (soft-delete) contacts, per user ---------------------- */
+function hiddenKey(){ return LS_HIDDEN_PREFIX + (session ? session.username : "guest"); }
+function getHiddenIds(){ return JSON.parse(localStorage.getItem(hiddenKey()) || "[]"); }
+function setHiddenIds(arr){ localStorage.setItem(hiddenKey(), JSON.stringify([...new Set(arr)])); }
+function hideContact(id){ const h = getHiddenIds(); h.push(id); setHiddenIds(h); }
+function unhideContact(id){ setHiddenIds(getHiddenIds().filter(x => String(x)!==String(id))); }
+
+/* Real delete: tries the sheet first (needs a "deletecontact" action in your
+   Apps Script). If that action doesn't exist yet, it hides the contact on
+   this device instead, so the delete button never silently does nothing. */
+async function tryDeleteContact(id){
+  const r = await api("deletecontact", { username:session.username, pin:session.pin, id });
+  if(r.ok){
+    contacts = contacts.filter(c => String(c.ID)!==String(id));
+    unhideContact(id);
+    return { deletedFromSheet:true };
+  }
+  hideContact(id);
+  return { deletedFromSheet:false };
+}
+function isHidden(id){ return getHiddenIds().map(String).includes(String(id)); }
+
+/* ---------------------- offline-safe retry queue ---------------------- */
+function getRetryQueue(){ return JSON.parse(localStorage.getItem(LS_QUEUE_RETRY) || "[]"); }
+function setRetryQueue(q){ localStorage.setItem(LS_QUEUE_RETRY, JSON.stringify(q)); }
+function queueForRetry(payload){
+  const q = getRetryQueue(); q.push({ ...payload, ts:Date.now() }); setRetryQueue(q);
+}
+async function flushRetryQueue(){
+  const q = getRetryQueue();
+  if(!q.length) return;
+  const remaining = [];
+  const succeededIds = [];
+  for(const item of q){
+    try{
+      const r = await apiRaw("updatecontact", item);
+      if(!r.ok) remaining.push(item); else succeededIds.push(String(item.id));
+    }catch(e){ remaining.push(item); }
+  }
+  setRetryQueue(remaining);
+  if(succeededIds.length){
+    // Bug fix: a record that failed to save (pill showing "queued"/"error")
+    // and was then silently re-synced here in the background never had its
+    // pill updated — if that same record was still on screen, it stayed
+    // stuck showing a failure forever even though the sheet now had the
+    // correct data. Clear/refresh the pill for whichever record is
+    // currently displayed, if it just got synced.
+    if(ui.saveState && succeededIds.includes(String(ui.saveState.id))){
+      ui.saveState = { id: ui.saveState.id, phase: "saved" };
+      render();
+      const savedId = ui.saveState.id;
+      clearTimeout(saveRecord._clearTimer);
+      saveRecord._clearTimer = setTimeout(() => {
+        if(ui.saveState && ui.saveState.id === savedId && ui.saveState.phase === "saved"){ ui.saveState = null; render(); }
+      }, 2200);
+    }
+    showToast(`Synced ${succeededIds.length} pending update(s)`);
+  }
+}
+window.addEventListener("online", flushRetryQueue);
+
+/* ---------------------- API ----------------------
+   Bug fix: fetch() has no timeout of its own, so if Google Apps Script
+   ever just sits there (cold start, a locked sheet, a script stuck in an
+   infinite loop server-side) every call here used to hang forever with
+   no way to recover short of a manual page reload. Every request is now
+   aborted after REQUEST_TIMEOUT_MS and reported back as a normal
+   { ok:false, offline:true } failure, which every caller already knows
+   how to handle (retry queue, "queued" pill, etc.) — connectivity issues
+   degrade gracefully instead of freezing the app. */
+const REQUEST_TIMEOUT_MS = 20000;
+async function apiRaw(action, payload={}){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try{
+    const res = await fetch(BACKEND_URL, { method:"POST", body: JSON.stringify(Object.assign({ action }, payload)), signal: controller.signal });
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function api(action, payload={}){
+  if(BACKEND_URL.indexOf("PASTE_YOUR") === 0){
+    showToast("Backend not connected yet — paste your Google Apps Script URL in index.html");
+    return { ok:false, error:"Backend URL missing" };
+  }
+  try{
+    return await apiRaw(action, payload);
+  }catch(err){
+    console.error(err);
+    const isAbort = err && err.name === "AbortError";
+    return { ok:false, error: isAbort ? "Google Sheets is taking too long to respond" : "network", offline:true };
+  }
+}
+
+async function refreshUsage(){
+  const r = await api("getusagecount", {});
+  if(r.ok) usageCount = r.usageCount;
+}
+
+/* ---------------------- Self-pick leads by area (free, no purchase) ----------------------
+   Lets a field user top themselves up from an area that already has
+   unassigned contacts sitting in the sheet, capped at SELFPICK_MAX_LEADS
+   per request. This is deliberately narrow: they choose from a list of
+   AREAS the sheet already has, never a raw count of "everything left",
+   and never more than the cap in one go. Anything wider than that stays
+   an admin-only action (see "3. Assign Contacts to a User" below).
+
+   Needs two Apps Script actions this app calls but does not require you
+   to add right now — if they're missing, the modal says so plainly
+   instead of quietly failing:
+     - "getunassignedlocations" → { ok:true, locations:[{location, count}] }
+       listing each distinct location among rows with an empty AssignedTo.
+     - "selfassignbylocation" → { username, pin, location, limit } and
+       assigns up to `limit` unassigned rows matching that location to
+       `username`, returning { ok:true, assigned:<n> }. The admin's bulk
+       version (further down, in renderAdmin) sends one extra field,
+       `targetUsername`, so the same action can assign to someone else
+       instead of the caller — have the backend prefer `targetUsername`
+       over `username` as the assignee when it's present and the caller
+       is an admin.
+*/
+function openSelfPickModal(){
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="glass modal-box">
+      <button class="icon-btn modal-close" id="spClose">✕</button>
+      <div class="section-title" style="margin-bottom:2px"><span>📍 Get More Leads by Area</span></div>
+      <div class="mini" style="margin-bottom:12px">Pick an area that already has unassigned contacts. Up to ${SELFPICK_MAX_LEADS} at a time — for anything more, ask your admin.</div>
+      <div id="spBody" class="mini">Loading available areas…</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.onclick = e => { if(e.target === overlay) close(); };
+  document.getElementById("spClose").onclick = close;
+
+  (async () => {
+    const body = document.getElementById("spBody");
+    const r = await api("getunassignedlocations", { username:session.username, pin:session.pin });
+    if(!r.ok){
+      body.innerHTML = `<div class="notice warn">Self-pick by area isn't set up on your sheet's backend yet. Ask your admin to add a <b>"getunassignedlocations"</b> and a <b>"selfassignbylocation"</b> action to the Apps Script — until then, only the admin can assign contacts to you.</div>`;
+      return;
+    }
+    const locs = (r.locations||[]).filter(l => l.count > 0);
+    if(!locs.length){
+      body.innerHTML = `<div class="notice">No unassigned contacts are waiting in any area right now — check back later or ask your admin.</div>`;
+      return;
+    }
+    body.innerHTML = `
+      <div class="label">Area</div>
+      <select id="spLocation">${locs.map(l=>`<option value="${esc(l.location)}">${esc(l.location)} (${l.count} available)</option>`).join("")}</select>
+      <div class="label">How many (max ${SELFPICK_MAX_LEADS})</div>
+      <input id="spCount" type="text" inputmode="numeric" value="${Math.min(SELFPICK_MAX_LEADS,50)}"/>
+      <div id="spMsg" class="mini" style="margin-top:8px;color:var(--red)"></div>
+      <button id="spGoBtn" class="btn primary full" style="margin-top:14px">Assign These To Me</button>
+    `;
+    document.getElementById("spGoBtn").onclick = async () => {
+      const location = document.getElementById("spLocation").value;
+      let limit = parseInt(document.getElementById("spCount").value, 10) || 0;
+      const msg = document.getElementById("spMsg");
+      if(limit < 1){ msg.textContent = "Enter a number of at least 1."; return; }
+      if(limit > SELFPICK_MAX_LEADS){ limit = SELFPICK_MAX_LEADS; }
+      const goBtn = document.getElementById("spGoBtn");
+      goBtn.disabled = true; goBtn.textContent = "Assigning…";
+      const res = await api("selfassignbylocation", { username:session.username, pin:session.pin, location, limit });
+      if(!res.ok){
+        msg.textContent = res.error || "Could not assign contacts right now.";
+        goBtn.disabled = false; goBtn.textContent = "Assign These To Me";
+        return;
+      }
+      showToast(`Assigned ${res.assigned||limit} contacts from ${location} to you`);
+      close();
+      boot();
+    };
+  })();
+}
+
+function usageBadgeHtml(){
+  if(usageBadgeDismissed || usageCount===null) return "";
+  return `<span class="usage-badge" id="usageBadge">👁 Usage <b>${usageCount}</b><span class="x" id="usageDismiss" title="Hide this">✕</span></span>`;
+}
+function bindUsageBadge(){
+  const x = document.getElementById("usageDismiss");
+  if(x) x.onclick = () => { usageBadgeDismissed = true; sessionStorage.setItem("ccm_usage_dismissed","1"); render(); };
+}
+
+/* ---------------------- LOGIN ---------------------- */
+function renderLogin(){
+  let role = "user";
+  app.innerHTML = `
+    <div class="login-shell">
+      <div class="glass login-box">
+        <div class="login-head">
+          <div class="logo">CCM</div>
+          <div><div class="title">Cloud Call Master</div><div class="sub">Smart calling suite, powered by your Google Sheet</div></div>
+        </div>
+        <div class="role-toggle">
+          <button id="roleUserBtn" class="on">I'm a Field User</button>
+          <button id="roleAdminBtn">I'm the Admin</button>
+        </div>
+        <div class="label">Username</div>
+        <input id="loginUser" type="text" placeholder="e.g. rajendra1" autocomplete="off"/>
+        <div class="label">PIN</div>
+        <input id="loginPin" type="password" placeholder="4-6 digit PIN" inputmode="numeric"/>
+        <button id="loginBtn" class="btn primary full" style="margin-top:14px">Log in</button>
+        <div class="notice" style="margin-top:14px">
+          Field users log in with the username and PIN their admin gave them. Ask your admin if you don't have one.
+        </div>
+      </div>
+    </div>
+  `;
+  const roleUserBtn = document.getElementById("roleUserBtn");
+  const roleAdminBtn = document.getElementById("roleAdminBtn");
+  const userField = document.getElementById("loginUser");
+  roleUserBtn.onclick = () => { role="user"; roleUserBtn.classList.add("on"); roleAdminBtn.classList.remove("on"); userField.disabled=false; userField.value=""; userField.placeholder="e.g. rajendra1"; };
+  roleAdminBtn.onclick = () => { role="admin"; roleAdminBtn.classList.add("on"); roleUserBtn.classList.remove("on"); userField.value="admin"; userField.disabled=true; };
+
+  const doLogin = async () => {
+    const username = document.getElementById("loginUser").value.trim();
+    const pin = document.getElementById("loginPin").value.trim();
+    if(!username || !pin) return showToast("Enter username and PIN");
+    const lock = loginLockStatus(username);
+    if(lock.locked){
+      const secs = Math.ceil(lock.msLeft/1000);
+      return showToast(`Too many failed attempts. Try again in ${secs>=60 ? Math.ceil(secs/60)+" min" : secs+"s"}.`);
+    }
+    const btn = document.getElementById("loginBtn"); btn.disabled = true; btn.textContent = "Logging in…";
+    const slowNote = setTimeout(() => { if(!btn.disabled) return; btn.textContent = "Still connecting…"; }, 4000);
+    let r;
+    try{
+      r = await withTimeout(api("login", { username, pin }), 20000, "Login");
+    }catch(e){
+      clearTimeout(slowNote);
+      btn.disabled = false; btn.textContent = "Log in";
+      recordFailedLogin(username);
+      return showToast(e.message || "Login timed out — please try again");
+    }
+    clearTimeout(slowNote);
+    btn.disabled = false; btn.textContent = "Log in";
+    if(!r.ok){ recordFailedLogin(username); return showToast(r.error || "Login failed"); }
+    clearLoginAttempts(username);
+    session = { username:r.username, role:r.role, fullName:r.fullName || r.username, pin };
+    saveSession();
+    showToast(`Welcome, ${session.fullName}`);
+    boot();
+  };
+  document.getElementById("loginBtn").onclick = doLogin;
+  document.getElementById("loginPin").addEventListener("keydown", e => { if(e.key==="Enter") doLogin(); });
+}
+
+/* ---------------------- BOOT / ROUTER ----------------------
+   Login used to feel slow because every boot() call did THREE things
+   back-to-back before anything appeared: (1) getusagecount, (2) render
+   login if needed, (3) login, then (4) getcontacts — each a full round
+   trip to Google Apps Script (which is inherently a bit slow, often
+   1-3s per call on its own). That's 2-3 sequential round trips stacked
+   up before the user saw anything. This version:
+   - Shows the login screen immediately — never waits on a network call first.
+   - Fires getusagecount and getcontacts IN PARALLEL instead of one after another.
+   - Instantly shows last-known contacts from local cache (if any) while
+     fresh data loads in the background, so re-logins and re-opens feel instant.
+   - Times out gracefully with a Retry button instead of hanging forever. */
+function contactsCacheKey(){ return LS_CACHE_CONTACTS_PREFIX + (session ? session.username : ""); }
+function getCachedContacts(){
+  try{ const raw = localStorage.getItem(contactsCacheKey()); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function setCachedContacts(list){
+  try{ localStorage.setItem(contactsCacheKey(), JSON.stringify({ contacts:list, ts:Date.now() })); }catch(e){}
+}
+function withTimeout(promise, ms, label){
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} is taking too long — Google Sheets may be slow to respond right now.`)), ms))
+  ]);
+}
+
+async function boot(){
+  if(!session){ renderLogin(); return; }
+
+  // Show cached data instantly (if we have any) so the screen never sits
+  // blank while we wait on the network — then refresh it underneath.
+  const cached = getCachedContacts();
+  if(cached && Array.isArray(cached.contacts)){
+    contacts = cached.contacts;
+    render();
+  } else {
+    app.innerHTML = `<div class="wrap"><div class="notice" id="bootNotice">Loading your data from Google Sheet…</div></div>`;
+  }
+
+  let slowTimer = setTimeout(() => {
+    const el = document.getElementById("bootNotice");
+    if(el) el.innerHTML = `Still connecting to Google Sheets — first load can take a few seconds… <button id="bootRetryBtn" class="btn dark small" style="margin-left:8px">Retry</button>`;
+    const rb = document.getElementById("bootRetryBtn");
+    if(rb) rb.onclick = boot;
+  }, 5000);
+
+  try{
+    const [contactsRes, usageRes] = await Promise.all([
+      withTimeout(api("getcontacts", { username:session.username, pin: session.pin }), 20000, "Loading contacts"),
+      withTimeout(api("getusagecount", {}), 20000, "Loading usage").catch(() => ({ ok:false }))
+    ]);
+    clearTimeout(slowTimer);
+
+    if(!contactsRes.ok){
+      showToast(contactsRes.error || "Session expired, please log in again");
+      session = null; saveSession();
+      renderLogin();
+      return;
+    }
+    contacts = contactsRes.contacts || [];
+    setCachedContacts(contacts);
+    if(usageRes.ok) usageCount = usageRes.usageCount;
+    render();
+    flushRetryQueue();
+  }catch(err){
+    clearTimeout(slowTimer);
+    console.error(err);
+    if(!cached){
+      app.innerHTML = `<div class="wrap"><div class="notice danger">Could not reach the server: ${esc(err.message||"network error")}
+        <button id="bootRetryBtn2" class="btn dark small" style="margin-left:8px">Retry</button></div></div>`;
+      const rb = document.getElementById("bootRetryBtn2");
+      if(rb) rb.onclick = boot;
+    } else {
+      showToast("Couldn't refresh — showing your last saved data");
+    }
+  }
+}
+function render(){
+  if(!session){ renderLogin(); return; }
+  if(session.role === "admin") renderAdmin(); else renderUser();
+}
+
+/* ---------------------- USER VIEW ---------------------- */
+// Privacy: a field user must only ever see contacts assigned to them, never
+// the whole database. This filters client-side by the AssignedTo column so
+// it holds even if the backend response isn't already scoped per user.
+function assignedContacts(){
+  if(session.role === "admin") return contacts;
+  const me = String(session.username||"").trim().toLowerCase();
+  return contacts.filter(c => String(c.AssignedTo||"").trim().toLowerCase() === me);
+}
+function visibleContacts(){
+  const hidden = getHiddenIds().map(String);
+  return assignedContacts().filter(c => !hidden.includes(String(c.ID)));
+}
+function filteredContacts(){
+  let list = visibleContacts().map((c) => ({...c, __i: contacts.indexOf(c)}));
+  if(ui.statusFilter !== "All") list = list.filter(c => (c.Status || "Pending") === ui.statusFilter);
+  if(ui.search){
+    const q = ui.search.toLowerCase();
+    list = list.filter(c => Object.values(c).join(" ").toLowerCase().includes(q));
+  }
+  return list;
+}
+/* ---------------------- Record navigation (buttons + keyboard share this) ---------------------- */
+function goNextRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = (ui.currentIndex+1) % Math.max(list.length,1); renderUser(); }
+function goPrevRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = (ui.currentIndex-1+list.length) % Math.max(list.length,1); renderUser(); }
+function goFirstRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; ui.currentIndex = 0; renderUser(); }
+function goLastRecord(){ if(autoCall.active && autoCall.phase !== "idle") return; const list = filteredContacts(); ui.currentIndex = Math.max(list.length-1,0); renderUser(); }
+
+/* ---------------------- USER BASE: jump directly to a customer by their ID ----------------------
+   Looks up the ID against everything assigned to this user (ignoring the
+   current search/status filter, since the number a field user is handed
+   might not match whatever filter happens to be active), then clears the
+   filter and opens straight to that record. */
+function loadByUserBase(raw){
+  const q = String(raw||"").trim();
+  if(!q) return showToast("Enter a User Base number");
+  const match = visibleContacts().find(c => String(c.ID).trim() === q);
+  if(!match){ showToast(`No customer record found for User Base number "${q}".`); return; }
+  ui.statusFilter = "All";
+  ui.search = "";
+  const idx = filteredContacts().findIndex(c => String(c.ID) === String(match.ID));
+  ui.currentIndex = idx >= 0 ? idx : 0;
+  ui.drawerOpen = false;
+  renderUser();
+  showToast(`Loaded customer ${match.ID} — ${match.Name || "Unnamed"}`);
+}
+
+function draftKey(){ return LS_DRAFT_PREFIX + session.username; }
+function getDrafts(){ return JSON.parse(localStorage.getItem(draftKey()) || "{}"); }
+function setDraft(id, text){ const d = getDrafts(); d[id] = text; localStorage.setItem(draftKey(), JSON.stringify(d)); }
+function clearDraft(id){ const d = getDrafts(); delete d[id]; localStorage.setItem(draftKey(), JSON.stringify(d)); }
+
+/* ---------------------- Profile link (share-with-prospects) ---------------------- */
+// Each field user can save a link to their own profile / e-card / catalog and
+// share it straight to a prospect's WhatsApp with one tap. Stored per user on
+// this device; also tries to sync to the sheet if a "saveprofilelink" action
+// exists on the backend, but never depends on it.
+/* ---------------------- Shareable links (Profile / Plan Benefits / Join IFL) ---------------------- */
+// Each field user can save a few links they hand out to prospects — their own
+// profile, plan benefits, why-join-IFL — and one-tap share any of them to a
+// contact's WhatsApp. Stored per user on this device; also tries to sync to
+// the sheet if a "saveprofilelink" action exists on the backend, but never
+// depends on it.
+const SHARE_LINKS = [
+  { key:"profile",      icon:"🔗", label:"Profile Link",         shareLabel:"Share My Profile",      msg:name => `Hi ${name||""}, here's my profile/details:` },
+  { key:"benefitplans", icon:"📋", label:"Benefit for Plans",     shareLabel:"Share Plan Benefits",   msg:name => `Hi ${name||""}, here are the benefits of our plans:` },
+  { key:"benefitjoin",  icon:"🤝", label:"Benefit to Join IFL",   shareLabel:"Share IFL Join Benefits", msg:name => `Hi ${name||""}, here's why you should join IndiaFirst Life:` },
+];
+function shareLinkKey(key){ return LS_PROFILE_PREFIX + key + "_" + session.username; }
+function getShareLink(key){ return localStorage.getItem(shareLinkKey(key)) || ""; }
+function setShareLink(key, val){ localStorage.setItem(shareLinkKey(key), val); }
+
+function renderBulkWaPanel(){
+  const queue = bulkWaQueue();
+  const total = assignedContacts().filter(c => cleanNumber(c.Mobile).length >= 12).length;
+  const sentCount = total - queue.length;
+  const pct = total ? Math.round((sentCount/total)*100) : 0;
+  const next = queue[0] || null;
+  return `
+  <div class="glass section">
+    <div class="section-title"><span>📤 Bulk WhatsApp</span>
+      <button id="closeBulkWaBtn" class="icon-btn" title="Close">✕</button>
+    </div>
+    <div class="mini">Sends one contact at a time — WhatsApp itself requires a manual tap of Send, so this can't run unattended, but it's built to be as fast as one click per contact. Already-sent contacts are skipped automatically.</div>
+    <div class="label">Message template <span class="mini" style="display:inline">(use {name} for the contact's name)</span></div>
+    <textarea id="bulkWaTemplate">${esc(ui.bulkWaTemplate)}</textarea>
+    <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:linear-gradient(90deg,var(--green),#76f1ab)"></div></div>
+    <div class="mini" style="margin-top:6px">${sentCount} of ${total} messaged · ${queue.length} remaining</div>
+
+    ${next ? `
+    <div class="bulkwa-current">
+      <div class="bw-name">${esc(next.Name||"Unnamed")}</div>
+      <div class="bw-phone">${esc(next.Mobile||"")}</div>
+      <div class="toolbar" style="margin-top:10px">
+        <button id="bulkWaSendBtn" class="btn green">💬 Open WhatsApp &amp; Mark Sent</button>
+        <button id="bulkWaSkipBtn" class="btn ghost small">Skip</button>
+      </div>
+    </div>` : `<div class="notice" style="margin-top:12px">🎉 Everyone assigned to you with a valid mobile number has been messaged. Use "Reset Sent List" below if you want to run this campaign again (e.g. a new offer).</div>`}
+
+    <div class="bulkwa-list">
+      ${queue.slice(0,50).map(c => `<div class="bwrow"><span>${esc(c.Name||"Unnamed")}</span><span>${esc(c.Mobile||"")}</span></div>`).join("") || ""}
+    </div>
+    <div class="toolbar" style="margin-top:10px">
+      <button id="bulkWaResetBtn" class="btn dark small">↺ Reset Sent List</button>
+    </div>
+  </div>`;
+}
+
+function renderQueueTablePanel(){
+  const list = filteredContacts();
+  return `
+  <div class="glass section">
+    <div class="section-title"><span>🗂 Calling Queue</span>
+      <button id="closeQueueTableBtn" class="icon-btn" title="Close">✕</button>
+    </div>
+    <div class="mini" style="margin-bottom:8px">${list.length} contact(s) in your current view (search/status filter applies). Tap Open to jump straight to a customer.</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Customer</th><th>Phone</th><th>Status</th><th>Response</th><th></th></tr></thead>
+        <tbody>
+          ${list.map((c,idx)=>{
+            const resp = String(c.Remarks||"");
+            const respShort = resp.length>40 ? resp.slice(0,40)+"…" : resp;
+            return `<tr class="${idx===ui.currentIndex?"row-active":""}">
+              <td>${esc(c.ID)}</td>
+              <td>${esc(c.Name||"Unnamed")}</td>
+              <td>${esc(c.Mobile||"—")}</td>
+              <td><span class="badge">${esc(c.Status||"Pending")}</span></td>
+              <td>${esc(respShort||"—")}</td>
+              <td><button class="btn dark tiny" data-open-qi="${idx}">Open</button></td>
+            </tr>`;
+          }).join("") || `<tr><td colspan="6">No contacts match your current filters.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderUser(){
+  const list = filteredContacts();
+  if(!ui.restoredPosition){
+    ui.restoredPosition = true;
+    // Prefer the saved Auto Call resume position (contacts.leadId) so a
+    // fresh login/refresh lands on exactly where Auto Call would resume —
+    // this is what makes "displayed contact" and "resume position" the
+    // same thing when the user hasn't manually jumped anywhere yet.
+    // Falls back to the generic last-viewed contact if there's no Auto
+    // Call state (or that contact is no longer in the list).
+    const acState = loadAutoCallState();
+    const preferredId = (acState && acState.leadId != null) ? acState.leadId : getLastPosition();
+    if(preferredId != null){
+      const idx = list.findIndex(c => String(c.ID) === String(preferredId));
+      if(idx >= 0) ui.currentIndex = idx;
+    }
+  }
+  if(ui.currentIndex >= list.length) ui.currentIndex = 0;
+  const rec = list[ui.currentIndex] || null;
+  if(rec) saveLastPosition(rec.ID);
+  const total = visibleContacts().length;
+  const done = visibleContacts().filter(c => c.Status && c.Status !== "Pending").length;
+  const pct = total ? Math.round((done/total)*100) : 0;
+  const drafts = getDrafts();
+  const draftText = rec && drafts[rec.ID] !== undefined ? drafts[rec.ID] : (rec ? (rec.Remarks||"") : "");
+  const hasDraft = rec && drafts[rec.ID] !== undefined && drafts[rec.ID] !== (rec.Remarks||"");
+  const acBusy = autoCall.active && autoCall.phase !== "idle";
+
+  app.innerHTML = `
+    ${cornerLogoutHtml()}
+    <div class="wrap">
+      <div class="glass topbar">
+        <div class="brand">
+          <div class="logo">CCM</div>
+          <div>
+            <div class="title">Cloud Call Master</div>
+            <div class="sub">${esc(session.fullName)} <span class="tag">field user</span> ${usageBadgeHtml()}</div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <span class="badge">${done}/${total} worked</span>
+          <button id="selfPickTopBtn" class="btn green small">📍 Get More Leads</button>
+          <button id="myReportBtn" class="btn primary small">📊 My Report</button>
+          <button id="downloadMyReportBtn" class="btn dark small">⬇ Download My Report</button>
+          <button id="openBulkWaBtn" class="btn green small">📤 Bulk WhatsApp (${bulkWaQueue().length})</button>
+          <button id="openLinksBtn" class="btn dark small">🔗 Share Links</button>
+          <button id="openQueueTableBtn" class="btn dark small">🗂 Table (${total})</button>
+          <button id="openDrawerBtn" class="btn dark small queue-toggle">☰ Queue (${total})</button>
+        </div>
+      </div>
+
+      ${renderAutoCallBanner()}
+
+      ${(total>0 && done>=total) ? `
+      <div class="glass repurchase-banner">
+        <div class="r-text"><b>🎉 You've completed all ${total} contacts!</b><span>Pick up to ${SELFPICK_MAX_LEADS} more from an area with unassigned leads, or ask your admin to assign you more.</span></div>
+        <button id="selfPickBtn" class="btn primary small">📍 Get More Leads by Area</button>
+      </div>` : ""}
+
+      ${ui.showBulkWaPanel ? renderBulkWaPanel() : ""}
+      ${ui.showQueueTable ? renderQueueTablePanel() : ""}
+
+      ${ui.showLinksPanel ? `
+      <div class="glass section">
+        <div class="section-title"><span>Your Share Links</span>
+          <button id="closeLinksBtn" class="icon-btn" title="Close">✕</button>
+        </div>
+        <div class="mini" style="margin-bottom:8px">Save links you want to send prospects — your own profile, plan benefits, or reasons to join IFL. Once saved, one-tap WhatsApp share buttons appear on every contact.</div>
+        ${SHARE_LINKS.map(d => `
+          <div class="label">${d.icon} ${esc(d.label)}</div>
+          <div class="toolbar" style="margin-bottom:10px">
+            <input id="linkInput_${d.key}" type="text" placeholder="https://…" value="${esc(getShareLink(d.key))}" style="flex:1;min-width:180px"/>
+            <button class="btn primary small" data-save-link="${d.key}">Save</button>
+            ${getShareLink(d.key) ? `<button class="btn ghost small" data-copy-link="${d.key}">Copy</button>` : ""}
+          </div>
+        `).join("")}
+      </div>` : ""}
+
+      <div class="glass section" style="padding:12px 16px">
+        <div class="section-title"><span>Today's progress</span><span>${pct}%</span></div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>
+
+      <div class="layout">
+        <div id="drawerOverlay" class="drawer-overlay ${ui.drawerOpen?'open':''}"></div>
+        <aside class="glass panel queue-drawer ${ui.drawerOpen?'open':''}" id="queueDrawer">
+          <div class="section-title">
+            <span>Filters</span>
+            <button id="drawerCloseBtn" class="icon-btn drawer-close" title="Hide queue">✕</button>
+          </div>
+          <div class="userbase-box">
+            <div class="section-title" style="margin-bottom:6px"><span>User Base</span></div>
+            <div class="userbase-row">
+              <input id="userBaseInput" type="text" inputmode="numeric" placeholder="Enter ID e.g. 105" value="${esc(ui.userBaseValue)}"/>
+              <button id="userBaseLoadBtn" class="btn primary small">Load</button>
+            </div>
+            <div class="userbase-nav">
+              <button id="userBaseFirstBtn" class="btn dark tiny">⏮ First</button>
+              <button id="userBaseLastBtn" class="btn dark tiny">Last ⏭</button>
+            </div>
+          </div>
+
+          <div class="label">Search</div>
+          <input id="searchBox" type="text" placeholder="Name, mobile, address…" value="${esc(ui.search)}"/>
+          <div class="label">Status</div>
+          <select id="statusFilter">
+            <option value="All">All</option>
+            ${STATUS_OPTIONS.map(s=>`<option ${ui.statusFilter===s?"selected":""}>${s}</option>`).join("")}
+          </select>
+          <div class="section-title" style="margin-top:16px"><span>Your Queue</span></div>
+          <div class="list">
+            ${list.map((c,idx)=>`
+              <div class="record ${idx===ui.currentIndex?"active":""}" data-i="${idx}">
+                <div><div class="nm">${esc(c.Name||"Unnamed")}</div><div class="ph">${esc(c.Mobile||"")}</div></div>
+                <div class="rmeta"><span class="badge">${esc(c.Status||"Pending")}</span></div>
+              </div>`).join("") || `<div class="mini">No contacts assigned to you yet. Ask your admin to assign some.</div>`}
+          </div>
+        </aside>
+
+        <main>
+          ${rec ? `
+          <div class="call-card">
+            <button id="backToListBtn" class="back-btn">◀ Back to List</button>
+            <div class="card-top" style="margin-top:10px">
+              <div>
+                <div class="name">${esc(rec.Name||"Unnamed")}</div>
+                <div class="phone-row">
+                  <a class="phone" href="tel:${telNumber(rec.Mobile)}">📞 ${esc(rec.Mobile||"—")}</a>
+                  <button class="copy-chip" id="copyBtn">Copy</button>
+                </div>
+              </div>
+            </div>
+            ${SHARE_LINKS.filter(d=>getShareLink(d.key)).length ? `<div class="toolbar" style="margin-top:10px">
+              ${SHARE_LINKS.filter(d=>getShareLink(d.key)).map(d=>`<button class="btn dark small" data-share="${d.key}">${d.icon} ${esc(d.shareLabel)}</button>`).join("")}
+            </div>` : ""}
+            <div class="tabs ${acBusy?"ac-locked":""}">
+              ${STATUS_OPTIONS.map(s=>`<button class="tab ${rec.Status===s?"active":""}" data-status="${s}">${s}</button>`).join("")}
+            </div>
+            <div class="data">
+              <div class="kv"><div class="k">Alt Mobile</div><div class="v">${esc(rec.Alt||"—")}</div></div>
+              <div class="kv"><div class="k">Address</div><div class="v">${esc(rec.Address||"—")}</div></div>
+              <div class="kv full remarks-wrap">
+                ${hasDraft ? `<span class="save-flag">Unsaved</span>` : ""}
+                <div class="k">Remarks</div>
+                <textarea id="remarksBox" placeholder="Add a note about this call…">${esc(draftText)}</textarea>
+              </div>
+            </div>
+            <div class="actions ${acBusy?"ac-locked":""}">
+              <a class="btn green" href="tel:${telNumber(rec.Mobile)}">📞 Call</a>
+              <button class="btn blue" id="waBtn">💬 WhatsApp</button>
+              <button class="btn purple" id="smsBtn">✉️ Message</button>
+              <button class="btn primary" id="saveBtn" ${savingInFlight ? "disabled" : ""}>💾 Save</button>
+            </div>
+            <div class="actions-row2 ${acBusy?"ac-locked":""}">
+              <button class="btn dark" id="prevBtn">◀ Prev</button>
+              <button class="btn dark" id="nextBtn">Next ▶</button>
+              <button class="btn ghost" id="skipBtn">Skip</button>
+            </div>
+            <div class="card-foot">
+              <span class="mini">Record ${ui.currentIndex+1} of ${list.length}</span>
+              ${ui.saveState && String(ui.saveState.id)===String(rec.ID) ? `
+                <span class="save-pill ${ui.saveState.phase}">
+                  ${ui.saveState.phase==="saving" ? `<span class="dot"></span> Saving…` : ""}
+                  ${ui.saveState.phase==="saved" ? `✓ Response Saved` : ""}
+                  ${ui.saveState.phase==="queued" ? `📶 Saved on device — syncing…` : ""}
+                  ${ui.saveState.phase==="error" ? `⚠ Sheet rejected save. Will retry.` : ""}
+                </span>` : ""}
+            </div>
+          </div>
+          ` : `<div class="notice">No contacts to show. Ask your admin to assign some, or adjust your filters.</div>`}
+        </main>
+      </div>
+    </div>
+
+    ${rec ? `
+    <div class="mobile-dock">
+      <a class="dock-call" href="tel:${telNumber(rec.Mobile)}"><span class="ic">📞</span>Call</a>
+      <button id="dockWa"><span class="ic">💬</span>WhatsApp</button>
+      <button id="dockSms"><span class="ic">✉️</span>Message</button>
+      <button id="dockNext"><span class="ic">▶</span>Next</button>
+      <button id="dockSave" class="dock-save"><span class="ic">💾</span>Save</button>
+    </div>` : ""}
+  `;
+
+  bindUsageBadge();
+  bindCornerLogout();
+
+  const myReportBtn = document.getElementById("myReportBtn");
+  if(myReportBtn) myReportBtn.onclick = openMyReportModal;
+
+  const downloadMyReportBtn = document.getElementById("downloadMyReportBtn");
+  if(downloadMyReportBtn) downloadMyReportBtn.onclick = downloadMyReportCSV;
+
+  const backToListBtn = document.getElementById("backToListBtn");
+  if(backToListBtn) backToListBtn.onclick = () => { ui.drawerOpen = true; renderUser(); };
+
+  const selfPickBtn = document.getElementById("selfPickBtn");
+  if(selfPickBtn) selfPickBtn.onclick = openSelfPickModal;
+  const selfPickTopBtn = document.getElementById("selfPickTopBtn");
+  if(selfPickTopBtn) selfPickTopBtn.onclick = openSelfPickModal;
+
+  const openLinksBtn = document.getElementById("openLinksBtn");
+  if(openLinksBtn) openLinksBtn.onclick = () => { ui.showLinksPanel = !ui.showLinksPanel; ui.showBulkWaPanel=false; ui.showQueueTable=false; renderUser(); };
+
+  const openBulkWaBtn = document.getElementById("openBulkWaBtn");
+  if(openBulkWaBtn) openBulkWaBtn.onclick = () => { ui.showBulkWaPanel = !ui.showBulkWaPanel; ui.showLinksPanel=false; ui.showQueueTable=false; renderUser(); };
+  const closeBulkWaBtn = document.getElementById("closeBulkWaBtn");
+  if(closeBulkWaBtn) closeBulkWaBtn.onclick = () => { ui.showBulkWaPanel = false; renderUser(); };
+
+  const openQueueTableBtn = document.getElementById("openQueueTableBtn");
+  if(openQueueTableBtn) openQueueTableBtn.onclick = () => { ui.showQueueTable = !ui.showQueueTable; ui.showLinksPanel=false; ui.showBulkWaPanel=false; renderUser(); };
+  const closeQueueTableBtn = document.getElementById("closeQueueTableBtn");
+  if(closeQueueTableBtn) closeQueueTableBtn.onclick = () => { ui.showQueueTable = false; renderUser(); };
+  document.querySelectorAll("[data-open-qi]").forEach(b => b.onclick = () => {
+    ui.currentIndex = Number(b.dataset.openQi);
+    ui.showQueueTable = false;
+    renderUser();
+  });
+
+  const userBaseInput = document.getElementById("userBaseInput");
+  if(userBaseInput){
+    userBaseInput.oninput = () => { ui.userBaseValue = userBaseInput.value; };
+    userBaseInput.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); loadByUserBase(userBaseInput.value); } });
+  }
+  const userBaseLoadBtn = document.getElementById("userBaseLoadBtn");
+  if(userBaseLoadBtn) userBaseLoadBtn.onclick = () => loadByUserBase(userBaseInput ? userBaseInput.value : ui.userBaseValue);
+  const userBaseFirstBtn = document.getElementById("userBaseFirstBtn");
+  if(userBaseFirstBtn) userBaseFirstBtn.onclick = goFirstRecord;
+  const userBaseLastBtn = document.getElementById("userBaseLastBtn");
+  if(userBaseLastBtn) userBaseLastBtn.onclick = goLastRecord;
+
+  const startAutoCallBtn = document.getElementById("startAutoCallBtn");
+  if(startAutoCallBtn) startAutoCallBtn.onclick = startAutoCall;
+  const stopAutoCallBtn = document.getElementById("stopAutoCallBtn");
+  if(stopAutoCallBtn) stopAutoCallBtn.onclick = stopAutoCall;
+  const autoCallManualReturnBtn = document.getElementById("autoCallManualReturnBtn");
+  if(autoCallManualReturnBtn) autoCallManualReturnBtn.onclick = () => handleAutoCallReturn(true);
+  const resetAutoCallBtn = document.getElementById("resetAutoCallBtn");
+  if(resetAutoCallBtn) resetAutoCallBtn.onclick = resetAutoCallPosition;
+  const bulkWaTemplate = document.getElementById("bulkWaTemplate");
+  if(bulkWaTemplate) bulkWaTemplate.oninput = () => { ui.bulkWaTemplate = bulkWaTemplate.value; };
+  const bulkWaSendBtn = document.getElementById("bulkWaSendBtn");
+  if(bulkWaSendBtn) bulkWaSendBtn.onclick = () => {
+    const c = bulkWaQueue()[0];
+    if(!c) return;
+    const num = cleanNumber(c.Mobile);
+    const msg = ui.bulkWaTemplate.replace(/\{name\}/gi, c.Name||"");
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
+    markBulkWaSent(c.ID);
+    renderUser();
+  };
+  const bulkWaSkipBtn = document.getElementById("bulkWaSkipBtn");
+  if(bulkWaSkipBtn) bulkWaSkipBtn.onclick = () => { const c = bulkWaQueue()[0]; if(c){ markBulkWaSent(c.ID); renderUser(); } };
+  const bulkWaResetBtn = document.getElementById("bulkWaResetBtn");
+  if(bulkWaResetBtn) bulkWaResetBtn.onclick = () => { if(confirm("Reset the sent list? Everyone will be eligible for the campaign again.")){ resetBulkWaSent(); renderUser(); } };
+  const closeLinksBtn = document.getElementById("closeLinksBtn");
+  if(closeLinksBtn) closeLinksBtn.onclick = () => { ui.showLinksPanel = false; renderUser(); };
+  document.querySelectorAll("[data-save-link]").forEach(b => b.onclick = () => {
+    const key = b.dataset.saveLink;
+    const val = document.getElementById("linkInput_"+key).value.trim();
+    if(val && !/^https?:\/\//i.test(val)){ showToast("Link should start with http:// or https://"); return; }
+    setShareLink(key, val);
+    api("saveprofilelink", { username:session.username, pin:session.pin, key, link:val }).catch(()=>{});
+    showToast(val ? "Link saved" : "Link cleared");
+    renderUser();
+  });
+  document.querySelectorAll("[data-copy-link]").forEach(b => b.onclick = () => copyToClipboard(getShareLink(b.dataset.copyLink)));
+
+  const openDrawerBtn = document.getElementById("openDrawerBtn");
+  const overlay = document.getElementById("drawerOverlay");
+  const closeDrawer = () => { ui.drawerOpen=false; renderUser(); };
+  if(openDrawerBtn) openDrawerBtn.onclick = () => { ui.drawerOpen=true; renderUser(); };
+  const drawerCloseBtn = document.getElementById("drawerCloseBtn");
+  if(drawerCloseBtn) drawerCloseBtn.onclick = closeDrawer;
+  if(overlay) overlay.onclick = closeDrawer;
+
+  const sb = document.getElementById("searchBox");
+  if(sb){
+    sb.oninput = e => { ui.search=e.target.value; ui.currentIndex=0; renderUser(); focusEnd("searchBox"); };
+  }
+  const sf = document.getElementById("statusFilter"); if(sf) sf.onchange = e => { ui.statusFilter=e.target.value; ui.currentIndex=0; renderUser(); };
+  document.querySelectorAll(".record[data-i]").forEach(el => el.onclick = () => { ui.currentIndex = Number(el.dataset.i); ui.drawerOpen=false; renderUser(); });
+
+  if(rec){
+    const currentRemarks = () => { const r = document.getElementById("remarksBox"); return r ? r.value : draftText; };
+
+    const remarksBox = document.getElementById("remarksBox");
+    if(remarksBox){
+      remarksBox.oninput = () => { setDraft(rec.ID, remarksBox.value); };
+    }
+
+    document.querySelectorAll(".tab").forEach(t => t.onclick = () => { if(acBusy) return; saveRecord(rec, t.dataset.status, currentRemarks()); });
+
+    const num = cleanNumber(rec.Mobile);
+    const openWa = () => { if(!num) return showToast("No mobile number"); window.open(`https://wa.me/${num}?text=${encodeURIComponent("Hello! Thank you for your interest.")}`,"_blank","noopener"); };
+    const openSms = () => { if(!num) return showToast("No mobile number"); window.location.href = `sms:${rec.Mobile}?body=${encodeURIComponent("Hello! Thank you for your interest.")}`; };
+    const doSave = () => { if(acBusy) return; saveRecord(rec, rec.Status || "Pending", currentRemarks()); };
+
+    const waBtn = document.getElementById("waBtn"); if(waBtn) waBtn.onclick = openWa;
+    const smsBtn = document.getElementById("smsBtn"); if(smsBtn) smsBtn.onclick = openSms;
+    const saveBtn = document.getElementById("saveBtn"); if(saveBtn) saveBtn.onclick = doSave;
+    const nextBtn = document.getElementById("nextBtn"); if(nextBtn) nextBtn.onclick = goNextRecord;
+    const prevBtn = document.getElementById("prevBtn"); if(prevBtn) prevBtn.onclick = goPrevRecord;
+    const skipBtn = document.getElementById("skipBtn"); if(skipBtn) skipBtn.onclick = goNextRecord;
+    const copyBtn = document.getElementById("copyBtn"); if(copyBtn) copyBtn.onclick = () => copyToClipboard(rec.Mobile||"");
+    document.querySelectorAll("[data-share]").forEach(b => b.onclick = () => {
+      const def = SHARE_LINKS.find(x => x.key === b.dataset.share);
+      const link = getShareLink(def.key);
+      if(!num) return showToast("No mobile number");
+      if(!link) return showToast("Save this link first");
+      const msg = `${def.msg(rec.Name)} ${link}`;
+      window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
+    });
+
+    const dockWa = document.getElementById("dockWa"); if(dockWa) dockWa.onclick = openWa;
+    const dockSms = document.getElementById("dockSms"); if(dockSms) dockSms.onclick = openSms;
+    const dockNext = document.getElementById("dockNext"); if(dockNext) dockNext.onclick = goNextRecord;
+    const dockSave = document.getElementById("dockSave"); if(dockSave) dockSave.onclick = doSave;
+  }
+}
+function focusEnd(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.focus();
+  const v = el.value; el.value=""; el.value=v;
+}
+
+// Tapping a status tab must always visibly respond immediately, even if the
+// network is slow or the save fails — so we update the tab colour and local
+// state right away, then sync to the sheet in the background and queue a
+// retry if that sync fails, instead of leaving the tap looking "stuck".
+// Bug fix: this call previously had no timeout at all, so a slow Apps
+// Script response (the #1 reported "it just hangs" complaint) left the
+// Save button disabled and the pill stuck on "Saving…" indefinitely —
+// with no way to tell if it had actually gone through. It now always
+// resolves within SAVE_TIMEOUT_MS one way or another; a timeout is
+// treated exactly like being offline (see "queued" below), never as a
+// permanent failure.
+const SAVE_TIMEOUT_MS = 15000;
+async function saveRecord(rec, status, remarks){
+  if(savingInFlight) return; // a save is already in progress — ignore repeat taps/Enter
+  savingInFlight = true;
+
+  const finalRemarks = remarks===undefined ? rec.Remarks : remarks;
+  rec.Status = status;
+  rec.Remarks = finalRemarks;
+  ui.saveState = { id: rec.ID, phase: "saving" };
+  renderUser(); // shows "Saving…" and disables Save immediately — never lies about success early
+
+  const payload = { username:session.username, pin: session.pin, id:rec.ID, status, remarks: finalRemarks };
+  let r, timedOut = false;
+  try{ r = await withTimeout(api("updatecontact", payload), SAVE_TIMEOUT_MS, "Saving"); }
+  catch(e){ r = { ok:false, error:"network", offline:true }; timedOut = true; }
+
+  if(!r.ok){
+    // Never lose the user's entered data: keep it queued for retry and keep
+    // it visible in the draft store so a page reload can't wipe it either.
+    queueForRetry(payload);
+    setDraft(rec.ID, finalRemarks);
+    // "queued" (offline / timed out — very likely to sync on its own) is
+    // shown differently from "error" (the sheet actively rejected the
+    // save) so a slow connection doesn't look like a hard failure.
+    const isConnectivityIssue = timedOut || r.offline;
+    ui.saveState = { id: rec.ID, phase: isConnectivityIssue ? "queued" : "error" };
+    showToast(isConnectivityIssue ? "Slow or no connection — saved on this device, will sync automatically" : `Unable to save (${r.error||"sheet error"}) — will retry automatically`);
+  }else{
+    clearDraft(rec.ID);
+    ui.saveState = { id: rec.ID, phase: "saved" };
+    showToast("Saved to Google Sheet");
+  }
+  savingInFlight = false;
+  renderUser();
+
+  if(ui.saveState && ui.saveState.phase === "saved"){
+    const savedId = rec.ID;
+    clearTimeout(saveRecord._clearTimer);
+    saveRecord._clearTimer = setTimeout(() => {
+      if(ui.saveState && ui.saveState.id === savedId && ui.saveState.phase === "saved"){ ui.saveState = null; renderUser(); }
+    }, 2200);
+  }
+}
+
+/* ---------------------- ADMIN VIEW ---------------------- */
+function renderAdmin(){
+  const total = contacts.length;
+  const byStatus = {};
+  contacts.forEach(c => { const s=c.Status||"Pending"; byStatus[s]=(byStatus[s]||0)+1; });
+  const adminHidden = getHiddenIds().map(String);
+
+  app.innerHTML = `
+    ${cornerLogoutHtml()}
+    <div class="wrap">
+      <div class="glass topbar">
+        <div class="brand">
+          <div class="logo">CCM</div>
+          <div>
+            <div class="title">Cloud Call Master</div>
+            <div class="sub">Admin console <span class="tag admin">admin</span> ${usageBadgeHtml()}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-grid" style="margin-bottom:14px">
+        <div class="glass stat"><div class="n">${total}</div><div class="l">Total contacts</div></div>
+        <div class="glass stat"><div class="n">${byStatus["Pending"]||0}</div><div class="l">Pending</div></div>
+      </div>
+
+      <div class="glass section">
+        <div class="section-title"><span>Backend connection</span>
+          <button id="testConnBtn" class="btn dark small">Test connection</button>
+        </div>
+        <div class="mini">I can't open your Google Sheet directly from here — it sits behind a private, PIN-protected script URL. Use this to see exactly what your backend sends back, so you can confirm it's talking to the right sheet.</div>
+        <div id="connResult" class="mini" style="margin-top:8px"></div>
+      </div>
+
+      <div class="glass section">
+        <div class="section-title"><span>1. Upload / Replace Database</span></div>
+        <div class="mini">Upload a CSV or XLSX with columns for name, mobile, alt mobile and address — header names can vary (e.g. "Phone", "Mobile No", "Contact Number" all work), up to 10,000 rows.</div>
+        <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" style="margin-top:10px"/>
+        <div id="filePreview" class="mini" style="margin-top:10px"></div>
+        <div class="toolbar" style="margin-top:10px">
+          <button id="uploadReplaceBtn" class="btn primary small" disabled>Replace entire database</button>
+          <button id="uploadAppendBtn" class="btn dark small" disabled>Append to database</button>
+          <button id="deleteDbBtn" class="btn red small">Delete entire database</button>
+        </div
